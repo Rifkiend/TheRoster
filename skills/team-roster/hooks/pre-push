@@ -1,0 +1,29 @@
+#!/bin/bash
+# Git pre-push hook — team-roster skill.
+# Blocks the push if the team roster is missing, invalid, or stale.
+# Installed by scripts/install-hook.sh into .git/hooks/pre-push
+# Bypass only in an emergency, and say so in the commit message:
+#   git push --no-verify
+set -e
+ROSTER="team/roster.json"
+if [ ! -f "$ROSTER" ]; then
+  ROSTER="friends/roster.json"
+fi
+if [ ! -f "$ROSTER" ]; then
+  ROSTER="roster.json"
+fi
+if [ ! -f "$ROSTER" ]; then
+  echo "pre-push: no roster found (looked for team/roster.json, friends/roster.json, roster.json)."
+  echo "pre-push: copy roster.example.json to team/roster.json and fill in your real team, then push again."
+  exit 1
+fi
+# Find the validator: prefer the skill copy, fall back to a project copy.
+SCRIPT=""
+for candidate in skills/team-roster/scripts/check_roster.py .agents/skills/team-roster/scripts/check_roster.py .claude/skills/team-roster/scripts/check_roster.py .github/skills/team-roster/scripts/check_roster.py scripts/check_roster.py; do
+  if [ -f "$candidate" ]; then SCRIPT="$candidate"; break; fi
+done
+if [ -z "$SCRIPT" ]; then
+  echo "pre-push: check_roster.py not found — cannot verify roster, blocking push."
+  exit 1
+fi
+python3 "$SCRIPT" "$ROSTER"
