@@ -12,6 +12,40 @@ It works for any job, not just code: a software team, a PKL group, a Shopee affi
 
 > **v1.3 — continue in place, don't fork:** the normal case is not "build new" — it is "the first AI built something good, the second AI continues it directly." v1.3 adds `features.py improve`: claim the feature's files, change the same files, keep the same `id` and `entry` when old callers must keep working, bump the version (`patch` bug fix, `minor` new compatible capability, `major` only when the entry changes), and record the improver in `contributors` + `changes`. Same capability = same id, higher version. A new id means a different capability.
 
+## Description
+
+**TheRoster is an Agent Skill so disconnected AIs know their teammates, claim work without colliding, reuse features instead of rebuilding them, and continue each other's work in place.**
+
+No server, no protocol, no new account — just three shared files synced through git: a team roster, a work ledger, and a feature registry, plus a pre-push hook that checks all three before anything goes live.
+
+## How it works
+
+```mermaid
+flowchart TD
+    A[Start a job] --> B[Load team/roster.json]
+    B --> C{Roster exists?}
+    C -- No --> D[Stop: make a roster first. Never guess teammates.]
+    C -- Yes --> E[Plan only with active roster members]
+    E --> F[Claim the task + files in team/work.json]
+    F --> G{Claim OK and push accepted?}
+    G -- No --> H[Stop: someone else owns it]
+    G -- Yes --> I[Search team/features.json]
+    I --> J{Stable feature exists?}
+    J -- Yes, use as-is --> K[Reuse its entry, record the use]
+    J -- Yes, needs to grow --> L[Continue in place: same id, bump version]
+    J -- No --> M[Build it, then register it]
+    K --> N[Verify: roster, claims, features]
+    L --> N
+    M --> N
+    N --> O{All checks pass?}
+    O -- No --> P[Push blocked: fix and re-check]
+    O -- Yes --> Q[Push. The next AI pulls the same files.]
+    P --> N
+    Q --> A
+```
+
+In short: **roster says who, the work ledger says who is doing what, the feature registry says what already exists** — and the hook enforces all three before every push.
+
 ## The 5 steps (the whole skill)
 
 1. **Load the roster first** — `team/roster.json`. If there is no roster, stop and make one. Do not guess the team.

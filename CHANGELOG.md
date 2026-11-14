@@ -5,7 +5,12 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
-## v1.3.0 — 2026-11-14: continue in place, don't fork
+## v1.3.1 — 2026-11-14: English description + flowchart
+
+- README now opens with a one-line English description and a Mermaid
+  flowchart of the whole workflow (roster → plan → claim → search/reuse/
+  continue/build → verify → push), so a reader sees how it works in
+  seconds.
 
 - Repo renamed to **TheRoster** (Rian's pick, 2026-11-14) — the skill inside
   stays `team-roster` (Agent Skills names are lowercase), the repo is
