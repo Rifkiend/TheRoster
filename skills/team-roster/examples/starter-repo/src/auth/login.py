@@ -8,6 +8,9 @@ symbol exist, and that the blob hash matches `entry_blob_sha`.
 """
 
 
+# roster-contract: login-api — this function is a shared interface.
+# Changing its signature is a breaking contract change: run
+# features.py improve --bump major --contract-change "<what breaks>".
 def login(email, password):
     """Log in with email + password, return a session token.
 

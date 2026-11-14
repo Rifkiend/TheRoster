@@ -12,6 +12,7 @@
   "heartbeat_at": "2026-11-14T10:00:00Z",
   "lamport": 1,
   "owner_id": "owner",
+  "prd_item": "prd-001",
   "released_by": "",
   "reserves_feature": "",
   "scope": {

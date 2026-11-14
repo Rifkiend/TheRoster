@@ -6,7 +6,7 @@
 
 ### One team. Every AI. Zero guesswork.
 
-[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.1.0-blue)](https://agentskills.io)
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.2.0-blue)](https://agentskills.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-yellow.svg)](#install)
 [![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#description)
@@ -30,6 +30,7 @@ It works for any job, not just code: a website-build team, a software team, an o
 
 | Version | What it added |
 |---|---|
+| **v2.2** | PRD layer (`team/prd/`, `prd.py`) — every task traces back to a decided item; feature cancellation (releases overlapping claims, `sync_check` stops stale workers); contract markers + dependencies (`--contract`, `--depends-on`, `--contract-change`, `strict_deps` knob). Every new power has a named failure mode + mitigation + knob — see `docs/v2.2-design.md`. |
 | **v2.1** | Event-log rotation — `archive_events.py` moves past months to `team/events-archive/`; hot log stays one month. Broader examples (website-build team first); emoji-free README. |
 | **v2.0** | Sharded state (**BREAKING**) — one file per roster member, claim, and feature; heartbeats, Lamport ordering, validation, `doctor.py`, CI twin. Migrate once with `migrate_v1_to_v2.py`. |
 | **v1.4** | `sync_check.py` — fetch the remote right before pushing; the blind-spot window shrinks from hours to seconds. |
@@ -41,9 +42,9 @@ Full details: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Description
 
-**TheRoster is an Agent Skill that gives every AI the same team — so disconnected AIs know their teammates, claim work without colliding, reuse features instead of rebuilding them, and continue each other's work in place.**
+**TheRoster is an Agent Skill that gives every AI the same team — so disconnected AIs know their teammates, claim work without colliding, reuse features instead of rebuilding them, continue each other's work in place, and trace every task back to a PRD item.**
 
-No server, no protocol, no new account — just sharded team state synced through git: one file per roster member, claim, and feature, plus a config, a generated index, an append-only event log, and a per-agent mailbox — checked by a pre-push hook and again by the same checks running in CI.
+No server, no protocol, no new account — just sharded team state synced through git: one file per roster member, claim, feature, and PRD item, plus a config, a generated index, an append-only event log, and a per-agent mailbox — checked by a pre-push hook and again by the same checks running in CI.
 
 ## How it works
 
@@ -51,7 +52,7 @@ No server, no protocol, no new account — just sharded team state synced throug
 
 In short: **roster says who, the claims say who is doing what, the feature registry says what already exists** — and the hook enforces all three before every push, with CI enforcing them again at merge time.
 
-**The blind spot (v1.4, still true in v2):** an AI only knows what it last fetched. If AI B improves a feature and pushes while AI A is still working on the old version, A does not know — until A fetches. `sync_check.py` closes that gap to seconds: it fetches the remote right before the push and fails if the remote is ahead. It cannot give true real-time awareness (that would need a server); it makes sure the blindness is caught *before* the push, not after.
+**The blind spot (v1.4, still true in v2):** an AI only knows what it last fetched. If AI B improves a feature and pushes while AI A is still working on the old version, A does not know — until A fetches. `sync_check.py` closes that gap to seconds: it fetches the remote right before the push and fails if the remote is ahead. Since v2.2 it also fails if the remote cancelled a feature A's active claim touches — a cancellation is discovered before the push, not after. It cannot give true real-time awareness (that would need a server); it makes sure the blindness is caught *before* the push, not after.
 
 ## The 5 steps (the whole skill)
 
@@ -164,10 +165,10 @@ Honest limits, stated plainly. v2 narrows every one of these; none of them is cl
 
 ```
 skills/team-roster/
-├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.1.0)
+├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.2.0)
 ├── examples/
 │   └── starter-repo/       # copyable starter repo (v2 layout) — `cp -r examples/starter-repo/* .`
-│       ├── team/           # config.json, roster/, claims/, features/, events.jsonl, mailbox/,
+│       ├── team/           # config.json, roster/, claims/, features/, prd/, events.jsonl, mailbox/,
 │       │                   # .gitattributes (events.jsonl merge=union), .gitignore (index.json generated)
 │       ├── src/auth/       # login.py — the login-api entry file, so features check passes
 │       ├── scripts/        # monitor_harga.py — the price-monitor entry file
@@ -176,7 +177,8 @@ skills/team-roster/
 │   ├── archive_events.py     # rotate past months of team/events.jsonl into team/events-archive/
 │   ├── check_roster.py       # roster validator: invalid or stale (30+ days) = exit 1, push blocked
 │   ├── claim.py              # claim / release / done / list / check work — no claim, no edit
-│   ├── features.py           # search / register / use / improve / deprecate / reverify / check
+│   ├── features.py           # search / register / use / improve / deprecate / cancel / reverify / check
+│   ├── prd.py                # PRD items: create / list / status / check — where the work comes from
 │   ├── sync_check.py         # remote sync check: fail if the remote moved while you worked
 │   ├── validate.py           # cross-file schema validation for the whole team/ tree
 │   ├── doctor.py             # session-start self-check: hook, config version, Python, scripts

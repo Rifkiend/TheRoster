@@ -2,10 +2,10 @@
 name: team-roster
 description: Know your team before you start any job, don't collide with teammates who are already working, don't rebuild a feature that already exists — continue and improve it in place instead. v2 stores team state sharded (one file per roster member, claim, and feature under team/, plus a generated index, event log, and mailbox), enforced by a local hook plus a CI twin. Load the roster first, check the mailbox and run doctor.py, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, and improve it in place with a version bump. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, never rebuild a feature that is already in the registry, and never fork a feature to improve it.
 license: MIT
-compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, scripts/archive_events.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
+compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, scripts/archive_events.py, scripts/prd.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 2.1.0
+  version: 2.2.0
   tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place, sync-check
 ---
 
@@ -13,6 +13,8 @@ metadata:
 
 > **BREAKING CHANGE — v2.0.0 is NOT compatible with v1.x.**
 > v2 stores team state **sharded**: one file per record — `team/roster/<id>.json`, `team/claims/<task-id>.json`, `team/features/<id>.json` — plus `team/config.json`, a generated `team/index.json`, an append-only `team/events.jsonl`, and `team/mailbox/<agent-id>.jsonl`. The old monolithic files (`team/roster.json`, `team/work.json`, `team/features.json`) no longer exist. **Migrating from v1: run `python3 scripts/migrate_v1_to_v2.py` once.** It moves the old files to `team/v1-backup/` and writes the sharded tree. Do not hand-edit the old files after migrating, and do not mix v1 and v2 layouts in one repo.
+
+> **v2.2.0** adds the PRD layer (`team/prd/`), feature cancellation, and contract markers + dependencies. All new fields are optional: old records are read as contract=false with no dependencies, and a team without `team/prd/` rebuilds with an empty prd list. `team/config.json` gains two knobs, both default off: `prd_required` and `strict_deps`.
 
 ## The idea in one sentence
 
@@ -82,6 +84,7 @@ git add team/claims/t-002.json && git commit -m "claim: t-002 kerjakan checkout 
 
 - Push the claim file **alone, first**, before any work commit exists. That is what makes losing a race cheap: the loser loses a claim, not an hour of work.
 - If `claim` says FAIL (someone else already claimed one of those files), STOP. Pick other work or wait. Do not edit the file anyway.
+- If the work comes from a PRD item, link it: `--prd <item-id>` on the claim (`claim.py claim ... --prd prd-001`). A claim on a cancelled or done item is refused at claim time and at push time. When `team/config.json` has `prd_required: true`, a claim without `--prd` is refused — see "PRD layer" below.
 - If your `git push` of the claim is rejected, someone claimed it first — fetch, re-read `team/claims/`, and stop if it conflicts. Never `--force push` a claim.
 - Claims are **exact file paths only** — no directories, no globs. A claim whose path is a prefix of, or has as a prefix, an existing claimed path is rejected. Paths are compared lowercased. Files newly created inside a claimed directory are unclaimed until claimed.
 - Quotas: max **5 active claims per agent**, max **10 files per claim**. Any agent may flag a claim as abusive; 3 flags from distinct agents, or 1 flag from a human roster member, releases it.
@@ -120,12 +123,12 @@ python3 skills/team-roster/scripts/features.py search auth team/features
   python3 skills/team-roster/scripts/features.py register --id checkout-api --name "Checkout API" --does "Create a checkout order and return its payment link" --entry src/checkout.py:create_order --files src/checkout.py tests/test_checkout.py --owner <your-roster-id> --keywords checkout order payment --breaking false --breaking-notes ""
   git add team/features/checkout-api.json && git commit -m "register: checkout-api" && git push
   ```
-  New registrations default to `experimental`. Promoting `experimental → stable` requires a `--reviewer` different from the owner, and a human-approved PR. Status transitions allowed: `experimental → stable`, `stable → deprecated`, `experimental → deprecated`. **`deprecated → stable` is FORBIDDEN without a human-approved PR.** Every transition needs `status_reason` + `status_changed_by` + `status_changed_at` in the same commit.
+  New registrations default to `experimental`. Promoting `experimental → stable` requires a `--reviewer` different from the owner, and a human-approved PR. Status transitions allowed: `experimental → stable`, `stable → deprecated`, `experimental → deprecated`, `experimental → cancelled`, `stable → cancelled`. **`deprecated → stable` is FORBIDDEN without a human-approved PR.** Every transition needs `status_reason` + `status_changed_by` + `status_changed_at` in the same commit.
   A feature that is not registered will be rebuilt by the next AI — and that rebuild will not be their fault, because they could not find yours.
 
 For non-code features (`kind: doc|design|process`), `entry` is a pointer (doc URL / repo path to the artefact), not `file:function`, and `entry_blob_sha` does not apply.
 
-Never delete a feature. If it is no longer wanted, deprecate it (`features.py deprecate --id old-login --replacement login-api`) and keep the entry — someone's old work may still use it (check `used_by`). Deletion is a human decision by the owner, only after `used_by` is empty and 30 days have passed since deprecation.
+Never delete a feature. If it is no longer wanted, deprecate it (`features.py deprecate --id old-login --replacement login-api`) and keep the entry — someone's old work may still use it (check `used_by`). If the decision is to kill the work itself — including work already in progress — cancel it instead (`features.py cancel --id old-login --by <you> --reason "..."`): the feature stays in the registry as a cancelled record (searchable, ranked last, never reusable), and every active claim touching its files is released in the same push. Deletion is a human decision by the owner, only after `used_by` is empty and 30 days have passed since deprecation.
 
 ### 5. Sync before you push
 
@@ -163,6 +166,46 @@ A roster is stale when any `active` member has `last_verified` more than 30 days
 
 The `hooks/pre-push` file in this skill is a ready git hook: install it with `scripts/install-hook.sh` and git will run all checks automatically on every push.
 
+## PRD layer (v2.2) — where the work comes from
+
+A PRD item (`team/prd/<id>.json`) is the unit of intent: one numbered item, one owner, the list of features that implement it, and a pointer to the PRD document itself (`source`, e.g. `docs/prd.md#login`). Claims point at an item with `--prd`, so every task traces back to a decision. Statuses: `planned → in_progress → done`, or `planned/in_progress → cancelled`. `done` and `cancelled` are **terminal** — a done item that needs more work gets a NEW item; a cancelled item stays as the record of a decision.
+
+```bash
+python3 skills/team-roster/scripts/prd.py create --id prd-001 --title "User login" --owner <your-roster-id> --source "docs/prd.md#login" --features login-api
+python3 skills/team-roster/scripts/prd.py status --id prd-001 --to in_progress --by <your-roster-id> --reason "work started"
+python3 skills/team-roster/scripts/claim.py claim --task t-002 --title "Kerjakan login" --owner <your-roster-id> --files src/auth/login.py --prd prd-001
+```
+
+- An item may reference features that do not exist yet — that is planned work. Marking it `done` is the honesty gate: `prd.py status --to done` FAILS while any referenced feature is unregistered, and validate.py FAILs a done item whose features are not `stable` or `cancelled`.
+- A claim on a `cancelled` or `done` item is refused at claim time and at push time (validate.py). When `prd_required: true` in `team/config.json`, a claim without `--prd` is refused. The default is `false` — small teams are not forced into PRD discipline; turn it on when the team wants it.
+- A cancelled item whose features are still live only warns (cancel the feature, or unlink it from the item). The PRD is still a file: `source` is a pointer, and nothing checks the document still says the same thing — that is a known limit, not a silent one.
+
+## Cancelling a feature (v2.2)
+
+Deprecation says "do not use this for new work". Cancellation says "stop the work itself" — including work already in progress.
+
+```bash
+python3 skills/team-roster/scripts/features.py cancel --id old-login --by <your-roster-id> --reason "PRD dropped this"
+```
+
+- The feature stays in the registry as a `cancelled` record (searchable, ranked last, never reusable, never improvable). Report it in search results so the next AI sees the decision instead of rebuilding it.
+- Cancelling releases every ACTIVE claim touching the feature's files **in the same push** (recorded as `released_by: "cancel:<you>"`, exempt from the one-owner rule like any release). The canceller does not need to chase the worker down.
+- A worker holding a stale local claim is stopped by sync_check: if the remote cancelled a feature its claim touches, the pre-push check FAILs ("feature X was CANCELLED by Y — release it and stop work"). A cancellation is visible at the next fetch, not instantly — sync_check is the control that makes that delay safe.
+- Only `experimental` and `stable` features can be cancelled. A `deprecated` feature stays as history. A cancelled feature's entry is exempt from live verification (its code may be gone) but stays registered, so nobody re-registers the same entry.
+
+## Contracts and dependencies (v2.2)
+
+A function or database schema shared between two developers is an interface — a contract. Mark it so:
+
+```bash
+python3 skills/team-roster/scripts/features.py register --id login-api --name "Login API" --does "..." --entry src/auth/login.py:login --files src/auth/login.py --owner <you> --keywords login auth --contract --depends-on session-store@1.2.0 --breaking false --breaking-notes ""
+```
+
+- `--contract` marks the feature a shared interface. Its entry file should carry a `# roster-contract: <id>` comment (any language's comment syntax), so a reader of the code finds the registry entry. `features.py check` warns when the marker is missing — warn-only, the flag itself is the control.
+- Changing a contract feature's entry needs BOTH `--bump major` AND `--contract-change "<what breaks and who must adapt>"`. An interface change is a deliberate, recorded decision — not a side effect of an improvement. The blob-sha check still catches any entry drift, contract or not.
+- `--depends-on id@version` records the version a feature was verified against. When a dependency bumps MAJOR, validate.py warns "needs reverify" — or FAILs when `strict_deps: true` in `team/config.json` (default: warn). `features.py reverify` refreshes the recorded versions after you read the new code. A recorded version newer than the dependency's current version FAILS (you cannot depend on a version that does not exist yet), and a dependency on an unregistered feature FAILS.
+- Search shows contracts (`[contract]`) and dependencies, so B sees before touching an entry that A owns it and who depends on it.
+
 ## Roster format
 
 See `references/roster-schema.md` for the full schema. Minimal member file (`team/roster/owner.json`):
@@ -198,18 +241,20 @@ The team's rules as data, so the hook and CI enforce the same numbers:
 {
   "canonical_remote": "origin",
   "canonical_branch": "main",
-  "skill_version": "2.0.0",
+  "skill_version": "2.2.0",
   "claim_ttl_minutes": 120,
   "heartbeat_minutes": 30,
   "grace_minutes": 15,
   "max_claims_per_agent": 5,
   "max_files_per_claim": 10,
   "branch_freshness_commits": 20,
-  "branch_freshness_days": 7
+  "branch_freshness_days": 7,
+  "prd_required": false,
+  "strict_deps": false
 }
 ```
 
-The hook refuses to run if the current branch's upstream is a fork or a different remote than `canonical_remote`. `skill_version` must match this skill's version — `doctor.py` checks that at session start.
+The hook refuses to run if the current branch's upstream is a fork or a different remote than `canonical_remote`. `skill_version` must match this skill's version — `doctor.py` checks that at session start. The two v2.2 knobs are both default off: `prd_required` (every new claim must name a PRD item) and `strict_deps` (a dependency that bumped MAJOR since the version a feature verified against FAILS validation instead of warning). Teams opt in to the strictness they can afford.
 
 ## What NOT to do
 
@@ -235,14 +280,16 @@ The hook refuses to run if the current branch's upstream is a fork or a differen
 
 - `references/roster-schema.md` — full JSON schema and validation rules for sharded roster files.
 - `references/conflict-prevention.md` — how claims-as-files stop collisions, heartbeat/stalled rules, the atomic pre-push sequence, and what it does NOT guarantee.
-- `references/feature-registry.md` — how the sharded registry stops duplicate builds, ranking + canonical rule, SemVer rules, entry validation, and why features are deprecated, never deleted.
+- `references/feature-registry.md` — how the sharded registry stops duplicate builds, ranking + canonical rule, SemVer rules, entry validation, cancellation, contracts + dependencies, and why features are deprecated, never deleted.
+- `references/prd.md` — the PRD layer: item lifecycle, the done-gate, how claims link to items, and the `prd_required` knob.
 - `references/examples.md` — four ready teams in the sharded layout, pointing at `examples/starter-repo/`.
-- `examples/starter-repo/` — copyable starter repo: `team/` (config.json, roster/, claims/, features/, events.jsonl, mailbox/, `.gitattributes` — events.jsonl merge=union — `.gitignore` — index.json is generated, never committed) plus the entry files the example features point at: `src/auth/login.py` (+ `tests/test_login.py`) and `scripts/monitor_harga.py`. Copy with `cp -r examples/starter-repo/* .` — the entry files are deliberately included so `features.py check` passes on the copy; without them the hook blocks the first push.
+- `examples/starter-repo/` — copyable starter repo: `team/` (config.json, roster/, claims/, features/, prd/, events.jsonl, mailbox/, `.gitattributes` — events.jsonl merge=union — `.gitignore` — index.json is generated, never committed) plus the entry files the example features point at: `src/auth/login.py` (+ `tests/test_login.py`) and `scripts/monitor_harga.py`. Copy with `cp -r examples/starter-repo/* .` — the entry files are deliberately included so `features.py check` passes on the copy; without them the hook blocks the first push.
 - `scripts/check_roster.py` — roster validator. Run it before push.
-- `scripts/claim.py` — claim / release / done / list / check work. Run it before touching shared work.
-- `scripts/features.py` — search / register / use / improve / deprecate / reverify / check features. Run it before building anything, and `improve` it when continuing someone else's feature.
-- `scripts/sync_check.py` — fetch the remote and compare feature versions and active claims before you push. Runs as part of the hook.
-- `scripts/validate.py` — cross-file schema validation for the whole `team/` tree.
+- `scripts/claim.py` — claim / release / done / list / check work. Run it before touching shared work. `--prd` links a claim to a PRD item.
+- `scripts/features.py` — search / register / use / improve / deprecate / cancel / reverify / check features. Run it before building anything, and `improve` it when continuing someone else's feature.
+- `scripts/prd.py` — create / list / status / check PRD items. Run it before claiming work that comes from a PRD.
+- `scripts/sync_check.py` — fetch the remote and compare feature versions, cancelled features, and active claims before you push. Runs as part of the hook.
+- `scripts/validate.py` — cross-file schema validation for the whole `team/` tree, including PRD items and dependencies.
 - `scripts/doctor.py` — session-start self-check (hook installed, config version matches, Python ≥ 3.9, scripts compile).
 - `scripts/migrate_v1_to_v2.py` — one-time v1 → v2 migration; moves old files to `team/v1-backup/`.
 - `scripts/install-hook.sh` — installs `hooks/pre-push` into `.git/hooks/`.

@@ -19,6 +19,7 @@ Usage:
         --owner rian --keywords login auth sesi \
         [--kind code] [--status experimental] [--version 1.0.0] \
         [--breaking false] [--breaking-notes ""] [--canonical] \
+        [--contract] [--depends-on login-api@1.0.0] \
         [--reviewer human-1] [--features-dir team/features]
     python3 features.py use --id login-api --by t-002 [--features-dir team/features]
     python3 features.py improve --id login-api --by rean --bump minor \
@@ -27,6 +28,8 @@ Usage:
         [--breaking-notes "..."] [--features-dir team/features]
     python3 features.py deprecate --id old-login --by rian --reason "..." \
         [--replacement login-api] [--features-dir team/features]
+    python3 features.py cancel --id old-login --by rian --reason "PRD dropped this" \
+        [--features-dir team/features]
     python3 features.py reverify --id login-api --by rean [--features-dir team/features]
     python3 features.py promote --id login-api --by rean --reviewer rian \
         --reason "reviewed, tested" [--features-dir team/features]
@@ -36,10 +39,26 @@ Rules:
   registration needs --status stable TOGETHER WITH --reviewer, and the
   reviewer must differ from the owner (same rule as promote).
 - Status transitions allowed: experimental->stable, stable->deprecated,
-  experimental->deprecated. deprecated->stable is FORBIDDEN — the
-  script rejects it and says it needs a human-approved PR. Every
-  transition records status_reason + status_changed_by +
-  status_changed_at in the same write.
+  experimental->deprecated, experimental->cancelled, stable->cancelled.
+  deprecated->stable is FORBIDDEN — the script rejects it and says it
+  needs a human-approved PR. done and cancelled are TERMINAL for PRD
+  items (prd.py) and the same idea holds here: a cancelled feature
+  never comes back; build a replacement instead. Every transition
+  records status_reason + status_changed_by + status_changed_at in
+  the same write. Cancelling (v2.2) also releases every ACTIVE claim
+  touching the feature's files in the same push — a cancellation
+  stops the work, it does not leave the worker to discover it.
+- Contracts and dependencies (v2.2): a feature with --contract is a
+  shared interface. Its entry file should carry a
+  "# roster-contract: <id>" comment (warned, not failed, when
+  missing). Changing a contract feature's entry needs BOTH --bump
+  major AND --contract-change "<what breaks and who must adapt>".
+  --depends-on id@version records the version the feature was
+  verified against; when a dependency bumps MAJOR, validate.py warns
+  (or FAILs with strict_deps=true in team/config.json) until the
+  dependent is re-verified (features.py reverify refreshes the
+  recorded versions). Old records without contract/depends_on are
+  read as contract=false with no dependencies.
 - SemVer, enforced mechanically: valid MAJOR.MINOR.PATCH, no leading
   zeros, reset-to-zero on bump, monotonic increase. 0.y.z is always
   experimental (forced on register/improve). A pre-release version
@@ -82,13 +101,15 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import team_common as tc
 
-STATUSES = {"stable", "experimental", "deprecated"}
+STATUSES = {"stable", "experimental", "deprecated", "cancelled"}
 KINDS = {"code", "doc", "design", "process"}
-STATUS_RANK = {"stable": 0, "experimental": 1, "deprecated": 2}
+STATUS_RANK = {"stable": 0, "experimental": 1, "deprecated": 2, "cancelled": 3}
 ALLOWED_TRANSITIONS = {
     ("experimental", "stable"),
     ("stable", "deprecated"),
     ("experimental", "deprecated"),
+    ("experimental", "cancelled"),
+    ("stable", "cancelled"),
 }
 
 
@@ -206,6 +227,46 @@ def _set_status_fields(rec, by, reason):
 
 # ---------------------------------------------------------------- commands
 
+def parse_depends_on(raw_list, features_dir, self_id):
+    """Parse --depends-on id@version entries. Returns (deps, error).
+    A dependency must be registered already, and the recorded version
+    may not be newer than the dependency's current version — you
+    cannot depend on a version that does not exist yet."""
+    deps, seen = [], set()
+    feats = load_features(features_dir)
+    for raw in raw_list or []:
+        if "@" not in raw:
+            return None, f"depends-on entry {raw!r} must be id@version (e.g. login-api@1.0.0)"
+        did, _, ver = raw.rpartition("@")
+        if not tc.valid_id(did):
+            return None, f"depends-on id {did!r} fails the id grammar"
+        if tc.parse_semver(ver) is None:
+            return None, f"depends-on version {ver!r} is not SemVer MAJOR.MINOR.PATCH"
+        if did == self_id:
+            return None, "a feature cannot depend on itself"
+        if did not in feats:
+            return None, f"depends on {did}, which is not registered — register the dependency first"
+        cur = tc.parse_semver(feats[did].get("version"))
+        if cur is not None and tc.parse_semver(ver) > cur:
+            return None, (f"depends on {did} v{ver} but {did} is only v{feats[did].get('version')} — "
+                          "you cannot depend on a version that does not exist yet")
+        if did not in seen:
+            seen.add(did)
+            deps.append({"id": did, "version": ver})
+    deps.sort(key=lambda d: d["id"])
+    return deps, None
+
+
+def merge_depends_on(existing, new):
+    """Union of old and new dependencies; a repeated id takes the new
+    (recorded) version."""
+    by_id = {d["id"]: d["version"] for d in (existing or [])
+             if isinstance(d, dict) and d.get("id")}
+    for d in new or []:
+        by_id[d["id"]] = d["version"]
+    return [{"id": i, "version": by_id[i]} for i in sorted(by_id)]
+
+
 def cmd_list(features_dir):
     feats = load_features(features_dir)
     if not feats:
@@ -214,7 +275,8 @@ def cmd_list(features_dir):
     print(f"FEATURES: {len(feats)} feature(s):")
     for fid in sorted(feats):
         f = feats[fid]
-        print(f"  - {fid} [{f.get('status')}] v{f.get('version')} — {f.get('does')} "
+        tag = " [contract]" if f.get("contract") is True else ""
+        print(f"  - {fid} [{f.get('status')}] v{f.get('version')}{tag} — {f.get('does')} "
               f"(entry: {f.get('entry')}, used by: {', '.join(f.get('used_by', [])) or 'nobody yet'})")
     return 0
 
@@ -263,8 +325,14 @@ def cmd_search(features_dir, query):
         print(f"      entry: {f.get('entry')} | owner: {f.get('owner_id')} | used by: {', '.join(f.get('used_by', [])) or 'nobody yet'}")
         if f.get("status") == "deprecated":
             print("      WARNING: deprecated — do not use for new work.")
+        elif f.get("status") == "cancelled":
+            print(f"      WARNING: cancelled ({f.get('status_reason')}) — do not rebuild it; it was deliberately killed.")
         elif f.get("status") == "experimental":
             print("      NOTE: experimental — use with care, or improve it in place instead of copying it.")
+        if f.get("contract") is True:
+            print("      CONTRACT: shared interface — changing its entry needs --contract-change plus --bump major.")
+        if f.get("depends_on"):
+            print("      depends on: " + ", ".join("%s@%s" % (d.get("id"), d.get("version")) for d in f["depends_on"]))
     return 0
 
 
@@ -295,7 +363,13 @@ def cmd_check(features_dir, roster_path, repo_root):
         if f.get("kind") not in KINDS:
             errors.append(f"{label}: kind must be one of {sorted(KINDS)} (got {f.get('kind')!r})")
         if f.get("status") not in STATUSES:
-            errors.append(f"{label}: status must be stable, experimental, or deprecated (got {f.get('status')!r})")
+            errors.append(f"{label}: status must be stable, experimental, deprecated, or cancelled (got {f.get('status')!r})")
+        if "contract" in f and not isinstance(f.get("contract"), bool):
+            errors.append(f"{label}: contract must be true or false")
+        for dep in f.get("depends_on") or []:
+            if (not isinstance(dep, dict) or not tc.valid_id(dep.get("id") or "")
+                    or tc.parse_semver(dep.get("version") or "") is None):
+                errors.append(f"{label}: depends_on entries must be {{\"id\": <id>, \"version\": <SemVer>}} (got {dep!r})")
         version = f.get("version")
         if version and tc.parse_semver(version) is None:
             errors.append(f"{label}: version must be SemVer MAJOR.MINOR.PATCH, no leading zeros (got {version!r})")
@@ -329,23 +403,44 @@ def cmd_check(features_dir, roster_path, repo_root):
         else:
             seen_entries[entry] = fid
         # Entry validation: file + symbol + blob sha (code kind).
-        kind = f.get("kind") or "code"
-        err = check_entry(entry, kind, repo_root)
-        if err:
-            errors.append(f"{label}: entry invalid: {err}")
-        elif kind == "code":
-            fpath = entry.rsplit(":", 1)[0]
-            full = os.path.join(repo_root, fpath)
-            want = f.get("entry_blob_sha")
-            if not want:
-                errors.append(f"{label}: missing entry_blob_sha — run: python3 features.py reverify --id {fid} --by <you>")
-            else:
-                have = tc.git_blob_sha(full)
-                if have is None:
-                    errors.append(f"{label}: cannot read entry file {fpath} to verify its blob sha")
-                elif have != want:
-                    errors.append(f"{label}: entry file changed since registration (blob sha mismatch) — "
-                                  f"suspect — run features.py reverify --id {fid} to re-verify after reading the new code")
+        # Cancelled features are dead history — their code may be
+        # gone — so they are exempt from live entry verification.
+        # The entry stays registered, so nobody rebuilds the same
+        # thing by accident. The duplicate-entry check above still runs.
+        if f.get("status") != "cancelled":
+            kind = f.get("kind") or "code"
+            err = check_entry(entry, kind, repo_root)
+            if err:
+                errors.append(f"{label}: entry invalid: {err}")
+            elif kind == "code":
+                fpath = entry.rsplit(":", 1)[0]
+                full = os.path.join(repo_root, fpath)
+                want = f.get("entry_blob_sha")
+                if not want:
+                    errors.append(f"{label}: missing entry_blob_sha — run: python3 features.py reverify --id {fid} --by <you>")
+                else:
+                    have = tc.git_blob_sha(full)
+                    if have is None:
+                        errors.append(f"{label}: cannot read entry file {fpath} to verify its blob sha")
+                    elif have != want:
+                        errors.append(f"{label}: entry file changed since registration (blob sha mismatch) — "
+                                      f"suspect — run features.py reverify --id {fid} to re-verify after reading the new code")
+            # Contract marker: the entry file should point back at the
+            # registry, so a reader of the code finds its contract.
+            # Warn-only — the contract flag itself is the control.
+            # Skipped when the entry is already invalid (that error
+            # is reported above; the marker check needs a read file).
+            if f.get("contract") is True and kind == "code" and not err:
+                fpath = entry.rsplit(":", 1)[0]
+                full = os.path.join(repo_root, fpath)
+                try:
+                    with open(full, encoding="utf-8", errors="ignore") as fh:
+                        text = fh.read()
+                except OSError:
+                    text = ""
+                if not re.search(r"roster-contract:\s*" + re.escape(fid) + r"\b", text):
+                    warnings.append(f"{label}: contract feature but the entry file has no "
+                                    f"'roster-contract: {fid}' marker — add it as a comment so the code points back at the registry")
         if f.get("status") == "deprecated" and f.get("used_by"):
             warnings.append(f"{label}: deprecated but still used by {', '.join(f['used_by'])} — do not delete it.")
         lv = f.get("last_verified", "")
@@ -409,6 +504,10 @@ def cmd_register(args):
         print(f"FEATURES: FAIL — --kind must be one of {sorted(KINDS)}")
         return 1
     status = args.status
+    if status == "cancelled":
+        print("FEATURES: FAIL — registering as cancelled is not allowed — register the feature, "
+              "then cancel it with: python3 features.py cancel --id <id> --by <you> --reason ...")
+        return 1
     if status == "stable":
         if not args.reviewer:
             print("FEATURES: FAIL — registering as stable needs --reviewer (a different roster member must review it); "
@@ -429,6 +528,10 @@ def cmd_register(args):
         return 1
     if args.kind == "code" and not args.files:
         print("FEATURES: FAIL — kind=code needs --files (the files implementing the feature)")
+        return 1
+    deps, derr = parse_depends_on(args.depends_on, features_dir, args.id)
+    if derr:
+        print("FEATURES: FAIL — " + derr)
         return 1
     path = feature_path(features_dir, args.id)
     if os.path.exists(path):
@@ -474,6 +577,8 @@ def cmd_register(args):
         "breaking": breaking,
         "breaking_notes": args.breaking_notes or "",
         "canonical": bool(args.canonical),
+        "contract": bool(args.contract),
+        "depends_on": deps,
         "used_by": [],
         "changes": [{"version": args.version, "by": args.owner,
                      "note": "First version", "date": date.today().isoformat()}],
@@ -501,6 +606,10 @@ def cmd_use(args):
         return 1
     if data.get("status") == "deprecated":
         print(f"FEATURES: WARNING — {args.id} is deprecated. Do not use it for new work.")
+        return 1
+    if data.get("status") == "cancelled":
+        print(f"FEATURES: WARNING — {args.id} is cancelled ({data.get('status_reason')}). "
+              "Do not use it, and do not rebuild it.")
         return 1
 
     def upd(f):
@@ -532,6 +641,10 @@ def cmd_improve(args):
     if data.get("status") == "deprecated":
         print(f"FEATURES: FAIL — {args.id} is deprecated. Improve its replacement instead, or ask a human to approve a new feature.")
         return 1
+    if data.get("status") == "cancelled":
+        print(f"FEATURES: FAIL — {args.id} is cancelled ({data.get('status_reason')}). "
+              "It stays as the record of a decision — do not improve it; build a replacement instead.")
+        return 1
     old_version = data.get("version", "1.0.0")
     new_version = tc.bump_version(old_version, args.bump)
     if new_version is None:
@@ -543,6 +656,12 @@ def cmd_improve(args):
     if args.entry and args.entry != data.get("entry") and args.bump != "major":
         print(f"FEATURES: FAIL — changing entry {data.get('entry')} -> {args.entry} breaks old callers, so --bump must be major, not {args.bump}.")
         return 1
+    entry_changed = bool(args.entry and args.entry != data.get("entry"))
+    if entry_changed and data.get("contract") is True and not args.contract_change:
+        print(f"FEATURES: FAIL — {args.id} is a CONTRACT (shared interface): changing its entry needs "
+              "--contract-change \"<what breaks and who must adapt>\" plus --bump major. "
+              "An interface change is a deliberate, recorded decision — not a side effect of an improvement.")
+        return 1
     if args.entry:
         for fid, other in load_features(args.features_dir).items():
             if fid != args.id and other.get("entry") == args.entry:
@@ -553,7 +672,10 @@ def cmd_improve(args):
             print(f"FEATURES: FAIL — new entry invalid: {err}")
             return 1
     keywords = sorted({tc.normalize_keyword(k) for k in (args.keywords or []) if tc.normalize_keyword(k)})
-    entry_changed = bool(args.entry and args.entry != data.get("entry"))
+    deps, derr = parse_depends_on(args.depends_on, args.features_dir, args.id)
+    if derr:
+        print("FEATURES: FAIL — " + derr)
+        return 1
     forced = None
     if str(new_version).startswith("0.") and data.get("status") == "stable":
         forced = "version %s is 0.y.z, always experimental" % new_version
@@ -569,6 +691,8 @@ def cmd_improve(args):
             f["files"] = sorted(set(f.get("files", [])) | set(args.files))
         if keywords:
             f["keywords"] = sorted(set(f.get("keywords", [])) | set(keywords))
+        if deps:
+            f["depends_on"] = merge_depends_on(f.get("depends_on"), deps)
         if args.by not in f.setdefault("contributors", [f.get("owner_id")]):
             f["contributors"].append(args.by)
         f["version"] = new_version
@@ -577,7 +701,9 @@ def cmd_improve(args):
         f["last_verified"] = date.today().isoformat()
         f.setdefault("changes", []).append({
             "version": new_version, "by": args.by,
-            "note": args.note, "date": date.today().isoformat(),
+            "note": args.note + (" (contract change: %s)" % args.contract_change
+                                 if args.contract_change else ""),
+            "date": date.today().isoformat(),
         })
         if entry_changed:
             fpath = f["entry"].rsplit(":", 1)[0] if (f.get("kind") or "code") == "code" else ""
@@ -628,6 +754,72 @@ def cmd_deprecate(args):
     return 0
 
 
+def cmd_cancel(args):
+    """Cancel a feature mid-flight (v2.2). The feature stays in the
+    registry as the record of a decision — it is never deleted — and
+    every ACTIVE claim touching its files is released in the same
+    push, so the worker stops instead of discovering the
+    cancellation at push time. (A worker that already holds a
+    stale local claim is also stopped by sync_check, which FAILs
+    when the remote cancelled a feature its claim touches.)"""
+    data, err = tc.load_json_file(feature_path(args.features_dir, args.id))
+    if err or not isinstance(data, dict):
+        print(f"FEATURES: FAIL — no feature with id {args.id}")
+        return 1
+    if data.get("status") == "cancelled":
+        print(f"FEATURES: FAIL — {args.id} is already cancelled")
+        return 1
+    if (data.get("status"), "cancelled") not in ALLOWED_TRANSITIONS:
+        print(f"FEATURES: FAIL — cannot move {data.get('status')} -> cancelled "
+              "(only experimental/stable features can be cancelled; a deprecated feature "
+              "stays as history — nobody should be working on it)")
+        return 1
+    old_status = data.get("status")
+    feature_files = data.get("files") or []
+
+    def upd(f):
+        f["status"] = "cancelled"
+        _set_status_fields(f, args.by, args.reason)
+        f.setdefault("changes", []).append({
+            "version": f.get("version"), "by": args.by,
+            "note": "Cancelled: %s" % args.reason, "date": date.today().isoformat(),
+        })
+    rec, err = mutate(args.features_dir, args.id, args.by, "feature_cancelled", upd,
+                      extra={"from": old_status, "reason": args.reason})
+    if err:
+        print("FEATURES: FAIL — " + err)
+        return 1
+    team_dir = tc.team_dir_of(args.features_dir)
+    claims_dir = os.path.join(team_dir, "claims")
+    released = []
+    for stem, (_path, c) in tc.load_records(claims_dir).items():
+        if not isinstance(c, dict) or c.get("status") != "active":
+            continue
+        if not any(tc.paths_overlap(f, g) for f in (c.get("files") or []) for g in feature_files):
+            continue
+        cpath = os.path.join(claims_dir, stem + ".json")
+        cur, _e = tc.load_json_file(cpath)
+        if not isinstance(cur, dict) or cur.get("status") != "active":
+            continue
+        cur["status"] = "released"
+        cur["released_by"] = "cancel:" + args.by
+        cur["lamport"] = int(cur.get("lamport") or 0) + 1
+        tc.save_json(cpath, cur)
+        tc.append_event(team_dir, "claim_released", cur["lamport"], args.by,
+                        base_commit=tc.git_head_commit(), task_id=stem,
+                        extra={"reason": "feature %s cancelled: %s" % (args.id, args.reason)})
+        released.append(stem)
+    rebuild(team_dir)
+    print(f"FEATURES: {args.id} cancelled by {args.by} ({args.reason}). "
+          "It stays in the registry — do not rebuild it.")
+    if released:
+        print(f"FEATURES: released {len(released)} active claim(s) on its files: {', '.join(sorted(released))}. "
+              "Commit + push the feature file AND the released claim file(s).")
+    else:
+        print("FEATURES: no active claim touched its files.")
+    return 0
+
+
 def cmd_reverify(args):
     data, err = tc.load_json_file(feature_path(args.features_dir, args.id))
     if err or not isinstance(data, dict):
@@ -643,15 +835,31 @@ def cmd_reverify(args):
     if kind == "code":
         fpath = entry.rsplit(":", 1)[0]
         blob_sha = tc.git_blob_sha(os.path.join(args.repo_root, fpath))
+    # Re-verify what this feature depends on, too: a reverify says
+    # "I checked my dependencies at their current versions" — it
+    # clears the needs-reverify flag validate.py raises after a
+    # dependency bumped MAJOR.
+    feats = load_features(args.features_dir)
+    refreshed = []
+    for dep in data.get("depends_on") or []:
+        cur = feats.get(dep.get("id") or "")
+        if cur and cur.get("version") and cur["version"] != dep.get("version"):
+            refreshed.append((dep["id"], dep.get("version"), cur["version"]))
 
     def upd(f):
         f["entry_blob_sha"] = blob_sha or ""
         f["last_verified"] = date.today().isoformat()
+        for dep in f.get("depends_on") or []:
+            cur = feats.get(dep.get("id") or "")
+            if cur and cur.get("version"):
+                dep["version"] = cur["version"]
     rec, err = mutate(args.features_dir, args.id, args.by, "feature_reverified", upd)
     if err:
         print("FEATURES: FAIL — " + err)
         return 1
     print(f"FEATURES: {args.id} re-verified by {args.by} — entry {entry}, blob {blob_sha or '(n/a)'}")
+    for did, old, new in refreshed:
+        print(f"FEATURES: dependency refreshed: {did} {old} -> {new}")
     return 0
 
 
@@ -722,6 +930,10 @@ def main():
     sp.add_argument("--breaking", default=None, choices=["true", "false"])
     sp.add_argument("--breaking-notes", default="")
     sp.add_argument("--canonical", action="store_true")
+    sp.add_argument("--contract", action="store_true",
+                    help="mark this feature a shared interface (contract): entry changes need --contract-change + major bump")
+    sp.add_argument("--depends-on", nargs="*", default=[],
+                    help="dependencies as id@version, e.g. login-api@1.0.0")
     sp.add_argument("--reviewer", default="")
     sp.add_argument("--branch", default="")
     sp.add_argument("--features-dir", default="team/features")
@@ -741,6 +953,10 @@ def main():
     sp.add_argument("--keywords", nargs="*", default=[])
     sp.add_argument("--breaking", default=None, choices=["true", "false"])
     sp.add_argument("--breaking-notes", default="")
+    sp.add_argument("--depends-on", nargs="*", default=[],
+                    help="add/refresh dependencies as id@version, e.g. login-api@1.0.0")
+    sp.add_argument("--contract-change", default="",
+                    help="required when changing the entry of a contract feature: what breaks and who must adapt")
     sp.add_argument("--features-dir", default="team/features")
     sp.add_argument("--repo-root", default=".")
     sp = sub.add_parser("deprecate")
@@ -748,6 +964,12 @@ def main():
     sp.add_argument("--by", required=True)
     sp.add_argument("--reason", required=True)
     sp.add_argument("--replacement", default="")
+    sp.add_argument("--features-dir", default="team/features")
+    sp = sub.add_parser("cancel")
+    sp.add_argument("--id", required=True)
+    sp.add_argument("--by", required=True)
+    sp.add_argument("--reason", required=True,
+                    help="why the feature is cancelled — recorded, and shown to anyone who finds it in search")
     sp.add_argument("--features-dir", default="team/features")
     sp = sub.add_parser("reverify")
     sp.add_argument("--id", required=True)
@@ -776,6 +998,8 @@ def main():
         return cmd_improve(args)
     if args.cmd == "deprecate":
         return cmd_deprecate(args)
+    if args.cmd == "cancel":
+        return cmd_cancel(args)
     if args.cmd == "reverify":
         return cmd_reverify(args)
     if args.cmd == "promote":

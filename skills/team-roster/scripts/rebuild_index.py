@@ -5,10 +5,11 @@ sharded team-roster v2 records.
 Usage:
     python3 rebuild_index.py [team]
 
-Reads team/roster/, team/claims/, team/features/ (ids + one-line
-descriptions + status) and writes team/index.json, sorted. Idempotent:
-if the rebuilt content is identical to the existing file, the file is
-left untouched and the script reports "unchanged".
+Reads team/roster/, team/claims/, team/features/, team/prd/ (ids +
+one-line descriptions + status) and writes team/index.json, sorted.
+Idempotent: if the rebuilt content is identical to the existing file,
+the file is left untouched and the script reports "unchanged". A team
+without team/prd/ (pre-v2.2) rebuilds with an empty prd list.
 
 team/index.json always contains:
     "_generated": "do not hand-edit; rebuilt by scripts/rebuild_index.py"
@@ -50,6 +51,7 @@ def build_index(team_dir):
             "task": rec.get("task", ""),
             "owner_id": rec.get("owner_id", ""),
             "status": rec.get("status", ""),
+            "prd_item": rec.get("prd_item", ""),
         })
     features = []
     for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "features")).items():
@@ -62,15 +64,28 @@ def build_index(team_dir):
             "version": rec.get("version", ""),
             "entry": rec.get("entry", ""),
             "does": rec.get("does", ""),
+            "contract": rec.get("contract", False),
+        })
+    prd = []
+    for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "prd")).items():
+        if not isinstance(rec, dict):
+            continue
+        prd.append({
+            "id": rec.get("id", stem),
+            "title": rec.get("title", ""),
+            "status": rec.get("status", ""),
+            "features": rec.get("features") or [],
         })
     roster.sort(key=lambda r: r["id"])
     claims.sort(key=lambda c: c["task_id"])
     features.sort(key=lambda f: f["id"])
+    prd.sort(key=lambda p: p["id"])
     return {
         "_generated": GENERATED_NOTE,
         "roster": roster,
         "claims": claims,
         "features": features,
+        "prd": prd,
     }
 
 
@@ -102,9 +117,9 @@ def main():
         if not os.path.isdir(os.path.join(team_dir, sub)):
             print(f"INDEX: warning — {os.path.join(team_dir, sub)} does not exist; treating it as empty.")
     changed, index = rebuild(team_dir)
-    n = (len(index["roster"]), len(index["claims"]), len(index["features"]))
+    n = (len(index["roster"]), len(index["claims"]), len(index["features"]), len(index["prd"]))
     print(f"INDEX: {'rebuilt' if changed else 'unchanged'} team/index.json — "
-          f"{n[0]} roster member(s), {n[1]} claim(s), {n[2]} feature(s).")
+          f"{n[0]} roster member(s), {n[1]} claim(s), {n[2]} feature(s), {n[3]} PRD item(s).")
     return 0
 
 

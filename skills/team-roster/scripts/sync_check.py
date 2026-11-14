@@ -18,8 +18,10 @@ Usage:
         [--remote origin] [--files f1 f2 ...] [--owner <my-roster-id>]
 Exit 0 = local is up to date with the remote (or there is no remote
 yet — first sync). Exit 1 = the remote is ahead: a feature version is
-newer there, or a remote active claim covers one of your --files and
-its owner is not you (--owner, or no local claim by that owner).
+newer there, a feature was cancelled there while you hold an active
+claim on its files, or a remote active claim covers one of your
+--files and its owner is not you (--owner, or no local claim by that
+owner).
 Remote active claims use the v2 grace window: a remote claim blocks
 only while it is active AND NOT stealable (now > expires_at + 15 min
 AND heartbeat stale 30+ min).
@@ -108,12 +110,15 @@ def main():
     errors, notes = [], []
 
     # 1. Feature versions: remote newer than local = you are behind.
+    cancelled_remote = {}
     for fid in remote_feature_ids:
         rf = load_remote_file(remote, branch,
                               os.path.join(args.features, fid + ".json"))
         if not isinstance(rf, dict):
             notes.append("remote feature %s is unreadable — pull and inspect it before building on it" % fid)
             continue
+        if rf.get("status") == "cancelled":
+            cancelled_remote[fid] = rf
         if fid not in local_features:
             notes.append("new on remote: %s v%s — pull it before you build on it." % (fid, rf.get("version")))
             continue
@@ -123,6 +128,28 @@ def main():
             errors.append("%s: remote v%s is NEWER than your local v%s (changed by %s)"
                           % (fid, rf.get("version"), local_features[fid].get("version"),
                              (rf.get("contributors") or [None])[-1]))
+
+    # 1b. Cancelled on the remote: a feature cancelled upstream must
+    # stop local work on its files. A cancellation is visible only at
+    # the next fetch — this is the control that makes that delay
+    # safe: you discover it here, before the push, not after it.
+    # (A canceller also releases overlapping claims in the same push;
+    # this catches a claim made before the cancellation landed.)
+    for fid, rf in sorted(cancelled_remote.items()):
+        rfiles = rf.get("files") or []
+        if not rfiles:
+            continue
+        for tid, lc in sorted(local_claims.items()):
+            if not tc.is_blocking(lc, cfg=cfg):
+                continue
+            overlap = sorted({f for f in (lc.get("files") or []) for g in rfiles
+                              if tc.paths_overlap(f, g)})
+            if not overlap:
+                continue
+            errors.append("feature %s was CANCELLED on the remote by %s (%s) — "
+                          "your claim %s still touches %s; release it and stop work"
+                          % (fid, rf.get("status_changed_by"), rf.get("status_reason"),
+                             tid, ", ".join(overlap)))
 
     # 2. Claims: a remote active (not stealable) claim on your files,
     # owned by someone else = stop. "Someone else" is judged by
