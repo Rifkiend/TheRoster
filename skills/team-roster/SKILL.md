@@ -1,12 +1,12 @@
 ---
 name: team-roster
-description: Know your team before you start any job, and don't collide with teammates who are already working. Load the team roster first — who is on the team, what each person or agent can do, how to reach them, and when the list was last verified — then check the work ledger, claim the task and files before touching them, and release the claim when done. Use when starting any group task, assigning work, mentioning a teammate, editing a shared file, or before pushing/committing work that involves other people. Never invent a teammate who is not in the roster, and never edit a file someone else has claimed.
+description: Know your team before you start any job, don't collide with teammates who are already working, and don't rebuild a feature that already exists. Load the team roster first — who is on the team, what each person or agent can do, how to reach them, and when the list was last verified — then check the work ledger, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, and register anything new you build. Use when starting any group task, assigning work, mentioning a teammate, editing a shared file, building a feature, or before pushing/committing work that involves other people. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, and never rebuild a feature that is already in the registry.
 license: MIT
-compatibility: Requires Python 3.9+ for scripts/check_roster.py and scripts/claim.py; git for the pre-push hook and for syncing the work ledger. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
+compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, and scripts/features.py; git for the pre-push hook and for syncing the roster, work ledger, and feature registry. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 1.1.0
-  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention
+  version: 1.2.0
+  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse
 ---
 
 # team-roster
@@ -23,7 +23,9 @@ AI models are stateless. Without a written list, an AI does not know who your te
 
 The roster alone does NOT stop collisions. It tells you WHO the team is, not WHO IS DOING WHAT right now. Two disconnected AIs cannot magically see each other — the only bridge is a shared file synced through git. That is the work ledger, `team/work.json`: one file = one owner at a time, claimed before work starts, released when done. Full rules: `references/conflict-prevention.md`.
 
-## Workflow — always do these 4 steps
+The roster + work ledger also do NOT stop duplicate features. They stop two people editing the same file at the same time, but they do not stop two people building the same feature one after another. That is the feature registry, `team/features.json`: before you build anything, search it. If a stable feature already does what you need, use it — do not rebuild it. If you build something new, register it there, so the next AI finds it instead of rebuilding it again. A feature that is not registered does not exist for the next AI. Full rules: `references/feature-registry.md`.
+
+## Workflow — always do these 5 steps
 
 ### 1. Load the roster first
 
@@ -67,22 +69,45 @@ git add team/work.json && git commit -m "claim: t-002 kerjakan checkout" && git 
 
 For non-code jobs, "files" can be the thing being claimed instead of a path: `produk: isku-kunci-sok`, `slot: threads 2026-11-15 pagi`, `alat: modem orbit`, `laporan: klien X — november`. Same rule: one owner at a time.
 
-### 4. Verify before you push
+### 4. Search before you build — reuse, don't rebuild
 
-Before any `git push`, commit that involves teammates, or handoff to the team, run both checks:
+Before building any feature, search the feature registry (`team/features.json`). Search with 2–3 different keywords — one empty search does not prove the feature does not exist.
+
+```bash
+git pull
+python3 scripts/features.py search login team/features.json
+python3 scripts/features.py search auth team/features.json
+```
+
+- If a `stable` match exists: USE IT. Call its `entry` (`file:function`). Do not rebuild it. Then record that you use it: `python3 scripts/features.py use --id login-api --by <your-task-id>`.
+- If an `experimental` match exists: use it with care, or improve it in place (claim its files first, step 3). Do not build a copy next to it with a similar name.
+- If a `deprecated` match exists: do not use it for new work. Use its replacement if one is listed.
+- If there is no match: build it (after claiming, step 3), test it, then **register it before you push**:
+  ```bash
+  python3 scripts/features.py register --id checkout-api --name "Checkout API" --does "Create a checkout order and return its payment link" --entry src/checkout.py:create_order --files src/checkout.py tests/test_checkout.py --owner <your-roster-id> --keywords checkout order payment
+  git add team/features.json && git commit -m "register: checkout-api" && git push
+  ```
+  A feature that is not registered will be rebuilt by the next AI — and that rebuild will not be their fault, because they could not find yours.
+
+Never delete a feature. If it is no longer wanted, deprecate it (`features.py deprecate --id old-login --replacement login-api`) and keep the entry — someone's old work may still use it (check `used_by`). Deletion is a human decision by the owner, only after `used_by` is empty and 30 days have passed since deprecation.
+
+### 5. Verify before you push
+
+Before any `git push`, commit that involves teammates, or handoff to the team, run all three checks:
 
 ```bash
 python3 scripts/check_roster.py team/roster.json
 python3 scripts/claim.py check team/work.json
+python3 scripts/features.py check team/features.json
 ```
 
-(The script paths are relative to this skill folder when testing the skill itself; in a real project, copy the scripts or point them at the project's roster/work files.)
+(The script paths are relative to this skill folder when testing the skill itself; in a real project, copy the scripts or point them at the project's roster/work/feature files.)
 
-- Exit 0 on both = roster is valid and fresh, and no file is claimed twice. Proceed.
-- Exit 1 = roster is invalid/stale, or the work ledger has a double claim / an owner who is not on the roster. Fix it, do not push. See the script output for exactly what is wrong.
+- Exit 0 on all three = roster is valid and fresh, no file is claimed twice, and no feature id or entry is registered twice. Proceed.
+- Exit 1 = roster is invalid/stale, the work ledger has a double claim / an owner who is not on the roster, or the feature registry has a duplicate id/entry / an owner who is not on the roster. Fix it, do not push. See the script output for exactly what is wrong.
 - A roster is stale when any `active` member has `last_verified` more than 30 days ago. Update `last_verified` only after actually checking that the person is still on the team in that role — never just change the date.
 
-The `hooks/pre-push` file in this skill is a ready git hook: install it with `scripts/install-hook.sh` and git will run both checks automatically on every push.
+The `hooks/pre-push` file in this skill is a ready git hook: install it with `scripts/install-hook.sh` and git will run all three checks automatically on every push.
 
 ## Roster format
 
@@ -116,14 +141,19 @@ Rules for the file itself:
 - Do not edit a file someone else has claimed, even for a "tiny fix".
 - Do not `--force push` a claim or a roster change.
 - Do not claim a whole folder or repo — a claim that broad blocks everyone.
+- Do not rebuild a feature that is already in the registry, even if you think you can build it better — improve the existing one in place, or say why it cannot be reused.
+- Do not delete a feature, a teammate, or a claim to "clean up". Deprecate / release / retire them instead, so history stays visible.
 
 ## References
 
 - `references/roster-schema.md` — full JSON schema and validation rules.
 - `references/conflict-prevention.md` — how the work ledger stops collisions, and what it does NOT guarantee (not real-time, not a filesystem lock).
+- `references/feature-registry.md` — how the feature registry stops duplicate builds, and why features are deprecated, never deleted.
 - `references/examples.md` — four ready rosters: software team, PKL group, Shopee affiliate team, freelance client team.
 - `roster.example.json` — copy-paste starter roster.
 - `work.example.json` — copy-paste starter work ledger (copy to `team/work.json`).
+- `features.example.json` — copy-paste starter feature registry (copy to `team/features.json`).
 - `scripts/check_roster.py` — roster validator. Run it before push.
 - `scripts/claim.py` — claim / release / list / check work. Run it before touching shared work.
+- `scripts/features.py` — search / register / use / deprecate / check features. Run it before building anything.
 - `scripts/install-hook.sh` — installs `hooks/pre-push` into `.git/hooks/`.

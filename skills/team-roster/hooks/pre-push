@@ -1,7 +1,8 @@
 #!/bin/bash
-# Git pre-push hook — team-roster skill v1.1.
+# Git pre-push hook — team-roster skill v1.2.
 # Blocks the push if the team roster is missing, invalid, or stale,
-# OR if the work ledger has a double claim / unknown owner.
+# OR if the work ledger has a double claim / unknown owner,
+# OR if the feature registry has a duplicate id / entry / unknown owner.
 # Installed by scripts/install-hook.sh into .git/hooks/pre-push
 # Bypass only in an emergency, and say so in the commit message:
 #   git push --no-verify
@@ -41,4 +42,19 @@ if [ -f "$WORK" ]; then
 else
   echo "pre-push: no work ledger found (team/work.json) — roster check passed, skipping claim check."
   echo "pre-push: copy work.example.json to team/work.json to enable anti-collision checks."
+fi
+
+FEATURES="team/features.json"
+if [ ! -f "$FEATURES" ]; then
+  FEATURES="friends/features.json"
+fi
+if [ ! -f "$FEATURES" ]; then
+  FEATURES="features.json"
+fi
+if [ -f "$FEATURES" ]; then
+  FEAT="$(find_script features.py)" || { echo "pre-push: features.py not found — cannot verify feature registry, blocking push."; exit 1; }
+  python3 "$FEAT" check "$FEATURES" --roster "$ROSTER"
+else
+  echo "pre-push: no feature registry found (team/features.json) — skipping feature check."
+  echo "pre-push: copy features.example.json to team/features.json to enable reuse checks."
 fi
