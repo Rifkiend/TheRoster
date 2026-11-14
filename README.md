@@ -24,7 +24,7 @@
 
 AI models are stateless — without a written list, an AI does not know who your teammates are, so it guesses. A guessed teammate is a hallucination. This skill fixes that with one rule: **the roster is the single source of truth about the team.**
 
-It works for any job, not just code: a software team, a PKL group, a Shopee affiliate team, a freelance client team, a content team. People, AI agents, and tools can all be on the roster.
+It works for any job, not just code: a website-build team, a software team, an open-source project, a content team, a small online store, a campus group project, a freelance client team. People, AI agents, and tools can all be on the roster.
 
 ## Version history
 
@@ -199,7 +199,7 @@ At the repo root: `CONTRIBUTING.md` (fork → feature branch → claim first →
 
 ## Examples
 
-See `skills/team-roster/references/examples.md`: a software team, a PKL group, a Shopee affiliate team, and a freelance client team — same skill, same 5 steps, only the people change. The copyable starter repo is `skills/team-roster/examples/starter-repo/`.
+See `skills/team-roster/references/examples.md`: a website-build team, a software team, an open-source project, a content team, a small online store, a campus group project, and a freelance client team — same skill, same 5 steps, only the people change. The copyable starter repo is `skills/team-roster/examples/starter-repo/`.
 
 ## Rules the skill enforces
 

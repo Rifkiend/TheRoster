@@ -145,8 +145,8 @@ Script ini membandingkan versi tiap fitur: kalau versi remote lebih baru dari ve
 
 Sama, yang didaftarkan adalah "hasil kerja yang bisa dipakai ulang" — dengan `kind` yang sesuai:
 
-- **Tim konten / affiliate** (`kind: doc`): fitur = template postingan, angle, atau script yang sudah terbukti: `id: angle-baut-slek`, `does: "Caption Reels baut slek untuk kunci sok"`, `entry: "affiliate/riset-angle/bahasa-postingan-rame.md"`.
-- **Tim PKL** (`kind: process`): fitur = prosedur yang sudah jadi: `id: ukur-sinyal`, `does: "Cara ukur sinyal di mess dan di titik tertinggi"`, `entry: "dokumen/ukur-sinyal.md"`.
+- **Tim konten** (`kind: doc`): fitur = template postingan, angle, atau script yang sudah terbukti: `id: angle-diskon`, `does: "Caption diskon untuk produk toko"`, `entry: "docs/angle-diskon.md"`.
+- **Tim lapangan** (`kind: process`): fitur = prosedur yang sudah jadi: `id: ukur-sinyal`, `does: "Cara ukur sinyal di lapangan dan di titik tertinggi"`, `entry: "dokumen/ukur-sinyal.md"`.
 - **Freelance** (`kind: code`): fitur = script laporan yang sudah jadi: `id: laporan-penjualan-otomatis`, `does: "Generate laporan penjualan Excel dari CSV"`, `entry: "buat_laporan.py"`.
 
 ## Yang TIDAK dijamin

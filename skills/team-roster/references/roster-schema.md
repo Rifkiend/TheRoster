@@ -18,7 +18,7 @@ The filename must match the `id` field inside it.
 | `type` | yes | `human`, `ai-agent`, or `tool`. |
 | `role` | yes | One short line: what this person is responsible for. |
 | `can_do` | yes | Array of 1–5 short verb phrases, e.g. `["approve posts", "record voice"]`. Keywords inside are lowercased, NFKC-normalised, single spaces. |
-| `contact` | yes | **Bare channel name only**, matching `^[a-z0-9_-]+$` — e.g. `GitHub`, `WhatsApp`, `Threads DM`, `email`, `Muse chat`. Never a phone number, address, URL, or password. For a code team, `id` is the GitHub username and `contact` is just `GitHub` — that is enough. WhatsApp / Threads DM are only examples for teams whose people are not on GitHub (a PKL group, an affiliate team). |
+| `contact` | yes | **Bare channel name only**, matching `^[a-z0-9_-]+$` — e.g. `GitHub`, `WhatsApp`, `Threads DM`, `email`, `Muse chat`. Never a phone number, address, URL, or password. For a code team, `id` is the GitHub username and `contact` is just `GitHub` — that is enough. WhatsApp / Threads DM are only examples for teams whose people are not on GitHub (a campus group, a small online-store team). |
 | `status` | yes | `active`, `away`, or `retired`. |
 | `last_verified` | yes | `YYYY-MM-DD` — last date someone actually confirmed this person is still on the team in this role. |
 | `added_by` | yes | Roster id of whoever added this member. Must be a human roster member, or a roster-owner agent acting on a human-approved PR. |
@@ -100,15 +100,15 @@ See `examples/starter-repo/team/roster/rian.json`:
 
 ```json
 {
-  "id": "rian",
-  "name": "Rian",
+  "id": "owner",
+  "name": "Owner",
   "type": "human",
-  "role": "owner — decides, approves, runs the Shopee app",
-  "can_do": ["approve posts", "pull Komisi Ekstra links", "record voice"],
-  "contact": "WhatsApp",
+  "role": "owner — decides direction, approves work",
+  "can_do": ["approve work", "decide direction", "set priorities"],
+  "contact": "email",
   "status": "active",
   "last_verified": "2026-11-14",
-  "added_by": "rian",
+  "added_by": "owner",
   "added_in_pr": "#1",
   "verification": "human-approved",
   "lamport": 1,

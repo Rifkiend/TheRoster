@@ -1,0 +1,18 @@
+{
+  "added_by": "owner",
+  "added_in_pr": "#1",
+  "can_do": [
+    "share cost",
+    "test"
+  ],
+  "contact": "WhatsApp group",
+  "id": "teammate-1",
+  "lamport": 1,
+  "last_seen_at": "2026-11-14T10:00:00Z",
+  "last_verified": "2026-11-14",
+  "name": "Teammate 1",
+  "role": "teammate \u2014 shares cost, tests",
+  "status": "active",
+  "type": "human",
+  "verification": "human-approved"
+}

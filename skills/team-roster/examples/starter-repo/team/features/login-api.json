@@ -5,14 +5,14 @@
   "canonical": true,
   "changes": [
     {
-      "by": "rian",
+      "by": "owner",
       "date": "2026-11-14",
       "note": "First version",
       "version": "1.0.0"
     }
   ],
   "contributors": [
-    "rian"
+    "owner"
   ],
   "does": "Login dengan email + password, mengembalikan token sesi",
   "entry": "src/auth/login.py:login",
@@ -32,10 +32,10 @@
   "lamport": 2,
   "last_verified": "2026-11-14",
   "name": "Login API",
-  "owner_id": "rian",
+  "owner_id": "owner",
   "status": "stable",
   "status_changed_at": "2026-11-14T10:00:00Z",
-  "status_changed_by": "rian",
+  "status_changed_by": "owner",
   "status_reason": "First release, reviewed and used by t-001",
   "used_by": [
     "t-001"
