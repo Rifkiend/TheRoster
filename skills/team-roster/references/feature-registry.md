@@ -34,6 +34,28 @@ Satu fitur = satu entri. Bukan satu file — satu *kemampuan* yang bisa dipanggi
 4. **Kalau ketemu yang `deprecated`: jangan pakai untuk kerjaan baru.** Pakai `replacement`-nya kalau ada. Tapi jangan hapus yang deprecated — mungkin masih ada task lama yang memakainya (cek `used_by`).
 5. **Kalau tidak ketemu: baru bikin.** Klaim file-nya dulu (aturan v1.1), bikin, tes, lalu **daftarkan** sebelum push: `features.py register --id ... --name ... --does ... --entry ... --files ... --owner ... --keywords ...`. Fitur yang tidak didaftarkan dianggap tidak ada — AI berikutnya akan bikin dobel tanpa salah, karena memang tidak bisa menemukannya.
 
+## Lanjutkan di tempat, jangan fork — ini inti skillnya
+
+Tujuan skill ini memang mempermudah pengerjaan, bukan sekadar mencegah dobel. Alur yang benar:
+
+**AI pertama bikin fitur yang bagus → AI kedua nyambung / ngubah langsung fitur itu → fitur yang sama jadi makin bagus, bukan ada dua versi.**
+
+Caranya, bukan dengan copy-paste ke file baru:
+
+1. **Cari** fiturnya (`features.py search`).
+2. **Klaim** file-file fitur itu (`claim.py claim`) — supaya tidak ada AI ketiga yang edit bersamaan.
+3. **Ubah file yang sama.** `id` tetap, `entry` tetap kalau pemakai lama harus tetap jalan.
+4. **Naikkan versi** (`features.py improve --bump minor`): `patch` untuk perbaikan bug, `minor` untuk kemampuan baru yang kompatibel (default), `major` hanya kalau `entry` berubah / pemakai lama rusak. Script menolak ganti `entry` tanpa `--bump major`.
+5. **Catat siapa yang lanjutin.** Owner tetap pemilik pertama; yang memperbaiki masuk ke `contributors` dan `changes` (versi, siapa, catatan, tanggal). Jadi AI ketiga bisa lihat: fitur ini sudah dilewati dua tangan, dan apa yang berubah di tiap versi.
+6. **Push registry-nya.** Kalau tidak di-push, AI berikutnya akan memperbaiki versi lama — dobel lagi, cuma beda bentuk.
+
+Kapan boleh bikin fitur baru, bukan lanjutin yang lama?
+- Tujuannya beda secara mendasar, bukan kemampuan yang sama tapi lebih besar.
+- Yang lama `deprecated` dan ada penggantinya — lanjutin penggantinya.
+- Yang lama tidak bisa diperbaiki tanpa merusak semua pemakainya, dan sudah dibuktikan, bukan sekadar "kayaknya lebih gampang bikin baru". Kalau alasannya itu, tulis alasannya di entri baru, supaya orang berikutnya tahu.
+
+Fork diam-diam adalah dobel work dengan nama lain. Kalau ada dua entri dengan `does` yang hampir sama, salah satunya harus dideprecate dan diarahkan ke pemenang.
+
 ## Aturan anti-hilang
 
 Ini bagian yang lo tekankan — "gak ngebuat ilang":

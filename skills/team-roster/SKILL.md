@@ -1,12 +1,12 @@
 ---
 name: team-roster
-description: Know your team before you start any job, don't collide with teammates who are already working, and don't rebuild a feature that already exists. Load the team roster first — who is on the team, what each person or agent can do, how to reach them, and when the list was last verified — then check the work ledger, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, and register anything new you build. Use when starting any group task, assigning work, mentioning a teammate, editing a shared file, building a feature, or before pushing/committing work that involves other people. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, and never rebuild a feature that is already in the registry.
+description: Know your team before you start any job, don't collide with teammates who are already working, don't rebuild a feature that already exists — continue and improve it in place instead. Load the team roster first — who is on the team, what each person or agent can do, how to reach them, and when the list was last verified — then check the work ledger, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, improve it in place with a version bump when it needs to grow, and register anything genuinely new you build. Use when starting any group task, assigning work, mentioning a teammate, editing a shared file, building or improving a feature, or before pushing/committing work that involves other people. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, never rebuild a feature that is already in the registry, and never fork a feature to improve it — improve the original.
 license: MIT
 compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, and scripts/features.py; git for the pre-push hook and for syncing the roster, work ledger, and feature registry. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 1.2.0
-  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse
+  version: 1.3.0
+  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place
 ---
 
 # team-roster
@@ -80,8 +80,17 @@ python3 scripts/features.py search auth team/features.json
 ```
 
 - If a `stable` match exists: USE IT. Call its `entry` (`file:function`). Do not rebuild it. Then record that you use it: `python3 scripts/features.py use --id login-api --by <your-task-id>`.
-- If an `experimental` match exists: use it with care, or improve it in place (claim its files first, step 3). Do not build a copy next to it with a similar name.
-- If a `deprecated` match exists: do not use it for new work. Use its replacement if one is listed.
+- If it exists but needs to grow: **CONTINUE IT IN PLACE — do not fork it.** This is the normal case, not the exception. The first AI builds a good feature; the second AI continues it directly, so the work really builds up instead of doubling. Steps:
+  1. Claim its files first (step 3) — `claim.py claim` on the feature's `files`.
+  2. Improve the same files, keep the same `id` and the same `entry` if old callers must keep working.
+  3. Bump the version with `features.py improve` — `patch` for a bug fix, `minor` for a new compatible capability (default), `major` only if the `entry` changes or old callers break. The script refuses an entry change without `--bump major`.
+  ```bash
+  python3 scripts/features.py improve --id login-api --by <your-roster-id> --bump minor --note "Tambah login Google" --does "Login email/password atau Google, mengembalikan token sesi" --files src/auth/google.py
+  git add team/features.json && git commit -m "improve: login-api 1.0.0 -> 1.1.0 (login Google)" && git push
+  ```
+  Owner stays the original owner; you are added to `contributors` and to the `changes` log, so the next AI can see who built on what. If the improvement is a genuinely different purpose (not the same capability grown bigger), only then build a new feature — and say in the new entry why the old one could not be continued.
+- If an `experimental` match exists: use it with care, or improve it in place the same way (claim its files first, step 3). Do not build a copy next to it with a similar name.
+- If a `deprecated` match exists: do not use it for new work, and do not improve it — improve its replacement if one is listed.
 - If there is no match: build it (after claiming, step 3), test it, then **register it before you push**:
   ```bash
   python3 scripts/features.py register --id checkout-api --name "Checkout API" --does "Create a checkout order and return its payment link" --entry src/checkout.py:create_order --files src/checkout.py tests/test_checkout.py --owner <your-roster-id> --keywords checkout order payment
@@ -142,6 +151,7 @@ Rules for the file itself:
 - Do not `--force push` a claim or a roster change.
 - Do not claim a whole folder or repo — a claim that broad blocks everyone.
 - Do not rebuild a feature that is already in the registry, even if you think you can build it better — improve the existing one in place, or say why it cannot be reused.
+- Do not fork a feature to improve it. Same capability = same `id`, same `entry`, higher version. A new `id` means a different capability.
 - Do not delete a feature, a teammate, or a claim to "clean up". Deprecate / release / retire them instead, so history stays visible.
 
 ## References
@@ -155,5 +165,5 @@ Rules for the file itself:
 - `features.example.json` — copy-paste starter feature registry (copy to `team/features.json`).
 - `scripts/check_roster.py` — roster validator. Run it before push.
 - `scripts/claim.py` — claim / release / list / check work. Run it before touching shared work.
-- `scripts/features.py` — search / register / use / deprecate / check features. Run it before building anything.
+- `scripts/features.py` — search / register / use / improve / deprecate / check features. Run it before building anything, and `improve` it when continuing someone else's feature.
 - `scripts/install-hook.sh` — installs `hooks/pre-push` into `.git/hooks/`.

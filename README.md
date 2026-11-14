@@ -10,12 +10,14 @@ It works for any job, not just code: a software team, a PKL group, a Shopee affi
 
 > **v1.2 — reuse, don't rebuild:** roster + work ledger stop two people editing at the same time, but they don't stop two people building the same feature one after another. v1.2 adds a shared feature registry (`team/features.json`): search it before you build anything — if a stable feature already does what you need, use it directly, don't rebuild it. If you build something new, register it there so the next AI finds it. Features are never deleted, only deprecated — so nothing disappears that others still use. See `skills/team-roster/references/feature-registry.md`.
 
+> **v1.3 — continue in place, don't fork:** the normal case is not "build new" — it is "the first AI built something good, the second AI continues it directly." v1.3 adds `features.py improve`: claim the feature's files, change the same files, keep the same `id` and `entry` when old callers must keep working, bump the version (`patch` bug fix, `minor` new compatible capability, `major` only when the entry changes), and record the improver in `contributors` + `changes`. Same capability = same id, higher version. A new id means a different capability.
+
 ## The 5 steps (the whole skill)
 
 1. **Load the roster first** — `team/roster.json`. If there is no roster, stop and make one. Do not guess the team.
 2. **Plan only with people on the roster** — assign work only to `active` members whose `can_do` matches. If nobody can do it, say so. Do not invent a teammate.
 3. **Claim the work before you touch it** — `git pull`, then `python3 scripts/claim.py claim --task t-002 --title "Kerjakan checkout" --owner <your-id> --files src/checkout.py`, then commit + push the claim *before* you start working. If the claim fails or the push is rejected, someone else is already on it — stop. Release with `claim.py done` when finished.
-4. **Search before you build** — `python3 scripts/features.py search login team/features.json`. If a stable feature exists, use its `entry` directly and record it with `features.py use --id login-api --by t-002`. If none exists, build it, then register it with `features.py register ...` before you push.
+4. **Search before you build — and continue what exists** — `python3 scripts/features.py search login team/features.json`. If a stable feature exists, use its `entry` directly and record it with `features.py use --id login-api --by t-002`. If it exists but needs to grow, continue it in place: claim its files, improve the same files, and bump the version with `features.py improve --id login-api --by <your-id> --bump minor --note "Tambah login Google"`. If none exists, build it, then register it with `features.py register ...` before you push.
 5. **Verify before you push** — run `python3 scripts/check_roster.py team/roster.json`, `python3 scripts/claim.py check team/work.json`, and `python3 scripts/features.py check team/features.json`. A roster is stale when an `active` member was last verified more than 30 days ago. Stale, double-claimed, or double-registered = push blocked.
 
 ## Install
@@ -112,6 +114,7 @@ See `skills/team-roster/references/examples.md`: a software team, a PKL group, a
 - `last_verified` is only updated after actually checking — never just re-date it.
 - One file = one owner at a time. No claim, no edit.
 - One capability = one registry entry. Search before you build; reuse a stable feature instead of rebuilding it.
+- Continue in place, don't fork: same capability = same `id`, higher version. A new `id` means a different capability.
 - Nothing disappears: features are deprecated, never deleted — `used_by` protects them.
 
 ## Origin

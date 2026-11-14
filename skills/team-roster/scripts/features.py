@@ -17,8 +17,16 @@ Usage:
         --owner rian --keywords login auth sesi [--status stable] \
         [--version 1.0.0] [--work team/features.json]
     python3 features.py use --id login-api --by t-002 [--work team/features.json]
+    python3 features.py improve --id login-api --by rean --bump minor \
+        --note "Tambah login Google" [--does "Login email/password atau Google"] \
+        [--files src/auth/google.py] [--work team/features.json]
     python3 features.py deprecate --id old-login [--replacement login-api] \
         [--work team/features.json]
+
+Version bumps for improve: patch = bug fix, same entry (1.0.0 -> 1.0.1);
+minor = new compatible capability, same entry (1.0.0 -> 1.1.0, default);
+major = entry changes / old callers break (1.0.0 -> 2.0.0). If --entry changes,
+--bump must be major.
 
 Exit 0 = ok / found. Exit 1 = invalid, duplicate, or not found (for use/deprecate).
 Search exit 0 even with no matches — it prints "no match" instead of failing,
@@ -27,10 +35,30 @@ Stdlib only.
 """
 import argparse
 import json
+import re
 import sys
 from datetime import date
 
 STATUSES = {"stable", "experimental", "deprecated"}
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def bump_version(version, bump):
+    if not SEMVER_RE.match(version or ""):
+        return None
+    major, minor, patch = (int(x) for x in version.split("."))
+    if bump == "patch":
+        patch += 1
+    elif bump == "minor":
+        minor += 1
+        patch = 0
+    elif bump == "major":
+        major += 1
+        minor = 0
+        patch = 0
+    else:
+        return None
+    return f"{major}.{minor}.{patch}"
 
 
 def load(path):
@@ -133,6 +161,8 @@ def cmd_check(path, roster_path):
         seen_entries[f.get("entry")] = f.get("id")
         if f.get("status") and f["status"] not in STATUSES:
             errors.append(f"{label}: status must be stable, experimental, or deprecated")
+        if f.get("version") and not SEMVER_RE.match(str(f["version"])):
+            errors.append(f"{label}: version must be semver x.y.z (got {f.get('version')})")
         if roster_ids is not None and f.get("owner_id") not in roster_ids:
             errors.append(f"{label}: owner {f.get('owner_id')} is not an active roster member")
         if f.get("status") == "deprecated" and f.get("used_by"):
@@ -166,9 +196,12 @@ def cmd_register(args):
         "files": sorted(set(args.files)),
         "keywords": sorted(set(args.keywords)),
         "owner_id": args.owner,
+        "contributors": [args.owner],
         "status": args.status,
         "version": args.version,
         "used_by": [],
+        "changes": [{"version": args.version, "by": args.owner,
+                     "note": "First version", "date": date.today().isoformat()}],
         "last_verified": date.today().isoformat(),
     })
     save(args.work, data)
@@ -192,6 +225,58 @@ def cmd_use(args):
     print(f"FEATURES: {args.id} is now used by {args.by} (entry: {f.get('entry')}).")
     return 0
 
+
+def cmd_improve(args):
+    """Continue / improve an existing feature in place — do not fork it.
+
+    Rules enforced here:
+    - deprecated features cannot be improved (use their replacement).
+    - changing --entry requires --bump major (old callers would break).
+    - version always goes up; owner stays the original owner, the improver
+      is added to contributors and to the changes log.
+    Claim the feature's files with claim.py BEFORE improving — this script
+    cannot see the work ledger, the SKILL.md workflow enforces that step.
+    """
+    data = load(args.work)
+    f = find(data, args.id)
+    if not f:
+        print(f"FEATURES: FAIL — no feature with id {args.id}. Search first, then register it if it truly does not exist.")
+        return 1
+    if f.get("status") == "deprecated":
+        print(f"FEATURES: FAIL — {args.id} is deprecated. Improve its replacement instead, or ask the owner to un-deprecate it.")
+        return 1
+    old_version = f.get("version", "1.0.0")
+    new_version = bump_version(old_version, args.bump)
+    if new_version is None:
+        print(f"FEATURES: FAIL — current version {old_version} is not semver (x.y.z), cannot bump it.")
+        return 1
+    if args.entry and args.entry != f.get("entry") and args.bump != "major":
+        print(f"FEATURES: FAIL — changing entry {f.get('entry')} -> {args.entry} breaks old callers, so --bump must be major, not {args.bump}.")
+        return 1
+    if args.entry:
+        for other in data.get("features", []):
+            if other.get("id") != args.id and other.get("entry") == args.entry:
+                print(f"FEATURES: FAIL — entry {args.entry} is already used by {other.get('id')}.")
+                return 1
+        f["entry"] = args.entry
+    if args.does:
+        f["does"] = args.does
+    if args.files:
+        f["files"] = sorted(set(f.get("files", [])) | set(args.files))
+    if args.keywords:
+        f["keywords"] = sorted(set(f.get("keywords", [])) | set(args.keywords))
+    if args.by not in f.setdefault("contributors", [f.get("owner_id")]):
+        f["contributors"].append(args.by)
+    f["version"] = new_version
+    f["last_verified"] = date.today().isoformat()
+    f.setdefault("changes", []).append({
+        "version": new_version, "by": args.by,
+        "note": args.note or f"Improved ({args.bump})", "date": date.today().isoformat(),
+    })
+    save(args.work, data)
+    print(f"FEATURES: {args.id} improved {old_version} -> {new_version} by {args.by} (entry: {f.get('entry')}).")
+    print("Remember: commit + push team/features.json so the next AI builds on this version, not the old one.")
+    return 0
 
 
 def cmd_deprecate(args):
@@ -235,6 +320,16 @@ def main():
     sp.add_argument("--id", required=True)
     sp.add_argument("--by", required=True)
     sp.add_argument("--work", default="team/features.json")
+    sp = sub.add_parser("improve")
+    sp.add_argument("--id", required=True)
+    sp.add_argument("--by", required=True)
+    sp.add_argument("--bump", default="minor", choices=["patch", "minor", "major"])
+    sp.add_argument("--note", default="")
+    sp.add_argument("--does", default="")
+    sp.add_argument("--entry", default="")
+    sp.add_argument("--files", nargs="*", default=[])
+    sp.add_argument("--keywords", nargs="*", default=[])
+    sp.add_argument("--work", default="team/features.json")
     sp = sub.add_parser("deprecate")
     sp.add_argument("--id", required=True)
     sp.add_argument("--replacement", default="")
@@ -251,6 +346,8 @@ def main():
         return cmd_register(args)
     if args.cmd == "use":
         return cmd_use(args)
+    if args.cmd == "improve":
+        return cmd_improve(args)
     if args.cmd == "deprecate":
         return cmd_deprecate(args)
     return 1
