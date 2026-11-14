@@ -140,7 +140,7 @@ See `skills/team-roster/references/examples.md`: a software team, a PKL group, a
 
 - Only people in the roster exist. No invented teammates.
 - `active` = can be assigned work. `away` = still on the team, no new work. `retired` = keep for history, never assign.
-- `contact` is a channel name (`WhatsApp`, `Threads DM`), never a phone number or password.
+- `contact` is a channel name (`GitHub`, `WhatsApp`, `Threads DM`), never a phone number or password. For a code team, the GitHub username goes in `id` and `contact` is just `GitHub` — that is enough.
 - `last_verified` is only updated after actually checking — never just re-date it.
 - One file = one owner at a time. No claim, no edit.
 - One capability = one registry entry. Search before you build; reuse a stable feature instead of rebuilding it.

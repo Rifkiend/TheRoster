@@ -5,7 +5,12 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
-## v1.3.3 — 2026-11-14: flowchart as an image
+## v1.3.4 — 2026-11-14: GitHub username is enough for contact
+
+- Clarified `contact`: it is only a channel name. For a code team, `id`
+  is the GitHub username and `contact` is just "GitHub". WhatsApp /
+  Threads DM are only examples for teams whose people are not on
+  GitHub. Updated in SKILL.md, README.md, and roster-schema.md.
 
 - The Mermaid flowchart in the README is replaced by a real image,
   `docs/flowchart.svg` (vector, 70 KB), embedded in the "How it works"

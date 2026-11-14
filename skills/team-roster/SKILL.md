@@ -138,7 +138,7 @@ See `references/roster-schema.md` for the full schema. Minimal entry:
 Rules for the file itself:
 - `id` is lowercase, hyphens only, unique. One person = one id, even if they have two roles.
 - `can_do` is a short list of verbs, not a biography. If it is longer than 5 items, the role is too vague — split it.
-- No passwords, no phone numbers, no private emails in the roster. `contact` is a channel name ("WhatsApp", "Threads DM", "email"), not the address itself.
+- No passwords, no phone numbers, no private emails in the roster. `contact` is a channel name ("GitHub", "WhatsApp", "Threads DM", "email"), not the address itself. For a code team, `id` is the GitHub username and `contact` is just "GitHub" — that is enough. WhatsApp / Threads DM are only examples for teams whose people are not on GitHub (a PKL group, an affiliate team).
 
 ## What NOT to do
 

@@ -19,7 +19,7 @@ File location in a real project: `team/roster.json` (preferred) or `friends/rost
 | `type` | yes | `human`, `ai-agent`, or `tool`. |
 | `role` | yes | One short line: what this person is responsible for. |
 | `can_do` | yes | Array of 1–5 short verb phrases, e.g. `["approve posts", "record voice"]`. |
-| `contact` | yes | Channel name only, e.g. `WhatsApp`, `Threads DM`, `email`, `Muse chat`. Never a phone number, address, or password. |
+| `contact` | yes | Channel name only, e.g. `GitHub`, `WhatsApp`, `Threads DM`, `email`, `Muse chat`. Never a phone number, address, or password. For a code team, `id` is the GitHub username and `contact` is just `GitHub`. |
 | `status` | yes | `active`, `away`, or `retired`. |
 | `last_verified` | yes | `YYYY-MM-DD` — last date someone actually confirmed this person is still on the team in this role. |
 
