@@ -5,6 +5,13 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
+## v2.1.0 — 2026-11-14: event-log rotation, broader examples, no-emoji README
+
+- **Event-log rotation (blind spot: the append-only log grows forever).** `team/events.jsonl` is ~200–400 bytes per event; a busy team writes ~1 MB per few thousand events, kept forever in every clone. New `scripts/archive_events.py`: the hot log keeps the current month only, past months move to `team/events-archive/YYYY-MM.jsonl` (same union merge driver, still in git, still grep-able). doctor.py warns when `events.jsonl` passes 1 MB. Lines without a parseable timestamp are never moved; history is archived, never deleted. No check reads old event lines, so archiving is safe.
+- **Broader examples.** New website-build team first (the core case — an AI building a website loads the roster before it writes a line), plus open-source project and content team; PKL group → campus group project, Shopee affiliate → small online-store team, all with neutral placeholder ids. Starter repo roster renamed rian/rean/teman-pkl-1 → owner/assistant/teammate-1 (index rebuilt, all hook checks pass).
+- **README cleanup.** Version history shortened to a table (was five long blockquotes); minimalist dark banner (`docs/banner.svg`); flowchart redrawn for the v2 sharded layout (was still v1.x paths, 111 KB → 10.6 KB); emoji removed from the title and the four-column table.
+- **Audit fixes.** README "Contributing / branch protection" section, CONTRIBUTING step 7, and the PR template no longer claim a `team-roster` CI check or code-owner review that never runs on TheRoster itself — PRs here are reviewed by the human owner. The three stale v1 example files that survived on the remote (snapshot push cannot delete files) were removed. Branch protection on `main` is on (require PR, no approvals, no bypass, no force-push/deletion); direct pushes now go via branch + PR + merge.
+
 ## v2.0.0 — 2026-11-14: sharded state, CI twin, heartbeats, Lamport ordering — BREAKING
 
 **v2 is NOT compatible with v1.** Team state moves from three monolithic
