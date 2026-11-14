@@ -1,4 +1,4 @@
-# Changelog — team-roster
+# Changelog — TheRoster
 
 All notable changes to this skill, in order. Dates are 2026-11-14 (WITA).
 The idea behind every version is the same: make it easier for a team of
@@ -6,6 +6,10 @@ humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
 ## v1.3.0 — 2026-11-14: continue in place, don't fork
+
+- Repo renamed to **TheRoster** (Rian's pick, 2026-11-14) — the skill inside
+  stays `team-roster` (Agent Skills names are lowercase), the repo is
+  `Rifkiend/TheRoster`, install with `npx skills add Rifkiend/TheRoster`.
 
 - Added `features.py improve` — the second AI continues the first AI's
   feature directly, in the same files, under the same `id`.

@@ -1,4 +1,4 @@
-# team-roster — an Agent Skill
+# TheRoster — team-roster, an Agent Skill
 
 **One sentence:** before you start any job, read the team list first. If someone is not on the list, they are not your teammate.
 
@@ -27,7 +27,7 @@ This repo follows the [Agent Skills open standard](https://agentskills.io) (Anth
 **Option A — install with the skills CLI (recommended):**
 
 ```bash
-npx skills add <github-user>/team-roster-skill
+npx skills add Rifkiend/TheRoster
 ```
 
 **Option B — copy it into your project:**
