@@ -38,29 +38,7 @@ No server, no protocol, no new account — just three shared files synced throug
 
 ## How it works
 
-```mermaid
-flowchart TD
-    A[Start a job] --> B[Load team/roster.json]
-    B --> C{Roster exists?}
-    C -- No --> D[Stop: make a roster first. Never guess teammates.]
-    C -- Yes --> E[Plan only with active roster members]
-    E --> F[Claim the task + files in team/work.json]
-    F --> G{Claim OK and push accepted?}
-    G -- No --> H[Stop: someone else owns it]
-    G -- Yes --> I[Search team/features.json]
-    I --> J{Stable feature exists?}
-    J -- Yes, use as-is --> K[Reuse its entry, record the use]
-    J -- Yes, needs to grow --> L[Continue in place: same id, bump version]
-    J -- No --> M[Build it, then register it]
-    K --> N[Verify: roster, claims, features]
-    L --> N
-    M --> N
-    N --> O{All checks pass?}
-    O -- No --> P[Push blocked: fix and re-check]
-    O -- Yes --> Q[Push. The next AI pulls the same files.]
-    P --> N
-    Q --> A
-```
+![TheRoster workflow — load the roster, claim the work, reuse or continue a feature, verify, then push](docs/flowchart.svg)
 
 In short: **roster says who, the work ledger says who is doing what, the feature registry says what already exists** — and the hook enforces all three before every push.
 

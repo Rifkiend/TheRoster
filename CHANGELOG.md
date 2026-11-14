@@ -5,7 +5,13 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
-## v1.3.2 — 2026-11-14: stylish README description
+## v1.3.3 — 2026-11-14: flowchart as an image
+
+- The Mermaid flowchart in the README is replaced by a real image,
+  `docs/flowchart.svg` (vector, 70 KB), embedded in the "How it works"
+  section, so the workflow is visible at a glance without rendering
+  Mermaid. SVG is used instead of PNG because the GitHub connector
+  only pushes UTF-8 files.
 
 - New header: centered title, tagline "One team. Every AI. Zero
   guesswork.", badges, and a four-pillar table (know the team / claim the
