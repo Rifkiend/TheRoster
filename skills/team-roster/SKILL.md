@@ -11,7 +11,7 @@ metadata:
 
 # team-roster
 
-> **⚠️ BREAKING CHANGE — v2.0.0 is NOT compatible with v1.x.**
+> **BREAKING CHANGE — v2.0.0 is NOT compatible with v1.x.**
 > v2 stores team state **sharded**: one file per record — `team/roster/<id>.json`, `team/claims/<task-id>.json`, `team/features/<id>.json` — plus `team/config.json`, a generated `team/index.json`, an append-only `team/events.jsonl`, and `team/mailbox/<agent-id>.jsonl`. The old monolithic files (`team/roster.json`, `team/work.json`, `team/features.json`) no longer exist. **Migrating from v1: run `python3 scripts/migrate_v1_to_v2.py` once.** It moves the old files to `team/v1-backup/` and writes the sharded tree. Do not hand-edit the old files after migrating, and do not mix v1 and v2 layouts in one repo.
 
 ## The idea in one sentence
