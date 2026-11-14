@@ -205,6 +205,15 @@ At the repo root: `CONTRIBUTING.md` (fork → feature branch → claim first →
 
 See `skills/team-roster/references/examples.md`: a website-build team, a software team, an open-source project, a content team, a small online store, a campus group project, and a freelance client team — same skill, same 5 steps, only the people change. The copyable starter repo is `skills/team-roster/examples/starter-repo/`.
 
+## Simulations
+
+Six scenarios, run against the real skill scripts (not mocks) — claim
+collisions, duplicate features, a PRD split across AIs, a mid-work
+cancellation, a careless contract change, and a stranger claiming to be a
+teammate. 45 steps, all 45 gates behaved as expected. Full list, what each
+one proves, and how to re-run them: [`docs/simulations.md`](docs/simulations.md)
+(runner + transcript in [`simulations/`](simulations/)).
+
 ## Rules the skill enforces
 
 - Only people in the roster exist. No invented teammates.

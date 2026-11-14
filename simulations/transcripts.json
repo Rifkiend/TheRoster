@@ -1,0 +1,843 @@
+{
+  "generated_by": "run_simulations.py — script ASLI TheRoster v2.2.0",
+  "repo": "Rifkiend/TheRoster",
+  "scenarios": [
+    {
+      "id": "s1",
+      "title": "Tabrakan: dua AI garap file yang sama",
+      "team": "Tim bangun website",
+      "story": "Owner lagi garap login (klaim t-001, tapi sudah kedaluwarsa). Assistant mau perbaiki login yang sama — lalu owner balik dan mau garap file yang sama di saat bersamaan.",
+      "tanpa_roster": "Dua AI edit src/auth/login.py bareng. Yang push duluan ketimpa yang push belakangan — kerjaan satu orang hilang tanpa jejak, ketahuannya pas merge conflict.",
+      "steps": [
+        {
+          "label": "Assistant klaim src/auth/login.py (t-001 sudah kedaluwarsa, boleh diambil alih)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-101 --title Perbaiki login --owner assistant --files src/auth/login.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-101 claimed by assistant for 2h — files: src/auth/login.py\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": "t-001 kedaluwarsa 12:00Z — klaim lama jadi stealable, klaim baru sah."
+        },
+        {
+          "label": "Owner coba klaim file yang SAMA di saat bersamaan",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-102 --title Ganti validasi login --owner owner --files src/auth/login.py",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101 (assistant, until 2026-11-14T14:27:28Z): src/auth/login.py\nPick other work, or wait until their claim expires / is released.",
+          "note": "Satu file = satu pemilik. Klaim kedua DITOLAK sebelum kerja dimulai."
+        },
+        {
+          "label": "Cek klaim: siapa yang pegang apa",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster --config team/config.json",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\n  ! branch freshness skipped: not in a git repo\nCLAIM CHECK: OK — 2 claim(s), 1 blocking, no conflicts.",
+          "note": ""
+        },
+        {
+          "label": "Assistant selesai, lepas klaim t-101",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --task t-101 --by assistant --claims-dir team/claims",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-101 -> released. Commit + push the claim file.",
+          "note": ""
+        },
+        {
+          "label": "Owner klaim ulang file yang sama — sekarang boleh",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-102 --title Ganti validasi login --owner owner --files src/auth/login.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-102 claimed by owner for 2h — files: src/auth/login.py\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": "Giliran. Bukan rebutan."
+        },
+        {
+          "label": "Validasi akhir semua file tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: OK — 3 roster member(s), 3 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 11 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-101": {
+            "status": "released",
+            "version": null,
+            "owner": "assistant",
+            "released_by": "assistant"
+          },
+          "t-102": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        },
+        "features": {
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Cari dulu sebelum bangun",
+      "team": "Tim bangun website",
+      "story": "Assistant disuruh bikin login. Sebelum nulis satu baris pun, dia wajib cari dulu di registry — siapa tahu sudah ada.",
+      "tanpa_roster": "Assistant bangun login dari nol, padahal login-api sudah stabil dan dipakai. Dua versi login hidup berdampingan, bug diperbaiki di satu tempat doang.",
+      "steps": [
+        {
+          "label": "Cari 'login' di registry fitur",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py search login team/features",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: 1 match(es) for 'login' (top-5, deterministic rank) — REUSE, do not rebuild:\n  #1 score=3 login-api [stable] v1.0.0 — Login dengan email + password, mengembalikan token sesi\n      entry: src/auth/login.py:login | owner: owner | used by: t-001\n      CONTRACT: shared interface — changing its entry needs --contract-change plus --bump major.",
+          "note": "Registry jawab: sudah ada login-api [stable] v1.0.0 — REUSE."
+        },
+        {
+          "label": "Pakai login-api (catat pemakai baru)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py use --id login-api --by assistant --features-dir team/features",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: login-api is now used by assistant (entry: src/auth/login.py:login).",
+          "note": ""
+        },
+        {
+          "label": "Coba daftarkan login-api lagi dengan id yang sama",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id login-api --name Login API baru --does Login ulang --entry src/auth/login.py:login --owner assistant --keywords login auth --features-dir team/features --repo-root .",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "FEATURES: FAIL — --breaking true|false is mandatory",
+          "note": "Id duplikat DITOLAK — tidak ada dua fitur kembar."
+        },
+        {
+          "label": "Klaim kerjaan profil yang memakai login-api (bukan membangun ulang)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --task t-103 --title Pakai login-api di halaman profil --owner assistant --files src/profile.py --reserves-feature login-api --claims-dir team/claims --roster team/roster --config team/config.json",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: warning — feature id login-api is already registered; reserving it has no effect — reuse that feature instead.\nCLAIM: OK — t-103 claimed by assistant for 2h — files: src/profile.py\nCommit trailer to use on every commit touching these files: [claim #1]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": ""
+        },
+        {
+          "label": "Validasi akhir semua file tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: OK — 3 roster member(s), 2 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 10 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-103": {
+            "status": "active",
+            "version": null,
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "features": {
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
+    },
+    {
+      "id": "s3",
+      "title": "PRD dibagi ke AI beda + done-gate",
+      "team": "Tim produk (4 AI: frontend, backend, QA, docs)",
+      "story": "PRD 'Checkout' dipecah: payment-api dikerjakan assistant. Owner mau menandai PRD selesai — tapi gerbang done tidak membiarkan klaim selesai mendahului bukti.",
+      "tanpa_roster": "PRD ditulis 'done' di dokumen, padahal payment-api belum terdaftar — apalagi stabil. Status bohong, ketahuannya pas pelanggan bayar dan gagal.",
+      "steps": [
+        {
+          "label": "Buat item PRD prd-002 'Checkout' (fitur: payment-api)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/prd.py create --id prd-002 --title Checkout --owner owner --source docs/prd.md#checkout --features payment-api --prd-dir team/prd",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "PRD: created prd-002 [planned] — \"Checkout\" (owner: owner).\nClaims on this item: python3 claim.py claim --task <id> --title ... --owner <you> --prd prd-002",
+          "note": ""
+        },
+        {
+          "label": "Assistant klaim payment-api, terikat ke prd-002",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --task t-104 --title Buat payment-api --owner assistant --files src/payment.py --prd prd-002 --claims-dir team/claims --roster team/roster --config team/config.json",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-104 claimed by assistant for 2h — files: src/payment.py\nCommit trailer to use on every commit touching these files: [claim #1]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": ""
+        },
+        {
+          "label": "Coba loncat planned → done langsung (tanpa lewat in_progress)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/prd.py status --id prd-002 --to done --by owner --reason selesai --prd-dir team/prd",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "PRD: FAIL — cannot move planned -> done (allowed: in_progress->cancelled, in_progress->done, planned->cancelled, planned->in_progress; done and cancelled are terminal — a done item that needs more work gets a NEW item)",
+          "note": "State machine: planned harus lewat in_progress dulu; done/cancelled itu terminal."
+        },
+        {
+          "label": "Gerakkan prd-002 ke in_progress (kerja dimulai)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/prd.py status --id prd-002 --to in_progress --by owner --reason kerja dimulai (t-104) --prd-dir team/prd",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "PRD: prd-002 planned -> in_progress by owner (kerja dimulai (t-104)). Commit + push the item file.",
+          "note": ""
+        },
+        {
+          "label": "Owner coba tandai prd-002 DONE (payment-api belum terdaftar)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/prd.py status --id prd-002 --to done --by owner --reason selesai --prd-dir team/prd",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "PRD: FAIL — cannot mark prd-002 done: feature(s) not registered yet: payment-api. Register them first, or remove them from this item.",
+          "note": "Done-gate: fitur yang dirujuk harus terdaftar dulu."
+        },
+        {
+          "label": "Assistant menulis src/payment.py (kerja nyata)",
+          "cmd": "write src/payment.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "def charge(amount, method):\n    \"\"\"Terima pembayaran, kembalikan status order.\"\"\"\n    return {\"status\": \"paid\", \"amount\": amount, \"method\": method}\n",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "Daftarkan payment-api sebagai experimental",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id payment-api --name Payment API --does Terima pembayaran, kembalikan status order --entry src/payment.py:charge --files src/payment.py --owner assistant --keywords payment bayar checkout --status experimental --breaking false --features-dir team/features --repo-root .",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: registered payment-api [experimental] v1.0.0 — entry src/payment.py:charge.\nRemember: commit + push the feature file so the next AI can find it.",
+          "note": ""
+        },
+        {
+          "label": "Owner tandai prd-002 DONE (fitur sudah terdaftar, tapi masih experimental)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/prd.py status --id prd-002 --to done --by owner --reason selesai --prd-dir team/prd",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "PRD: prd-002 in_progress -> done by owner (selesai). Commit + push the item file.",
+          "note": "status hanya memeriksa keterdaftaran — yang memeriksa 'stable' adalah validate. DONE lolos di sini, tapi belum bersih."
+        },
+        {
+          "label": "Validasi: item done tapi fitur experimental + klaim t-104 masih aktif",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: FAIL — do not push until this is fixed:\n  - PRD item prd-002: is done but feature payment-api is experimental — a done item's features must be stable or cancelled\n  - claim t-104: works on PRD item prd-002, which is done — release this claim; there is nothing to work on",
+          "note": "Gerbang kedua: validate MENOLAK item done yang fiturnya belum stable, dan klaim yang masih menempel di item done."
+        },
+        {
+          "label": "Assistant lepas klaim t-104 (tidak ada lagi yang dikerjakan di item done)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --task t-104 --by assistant --claims-dir team/claims",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-104 -> released. Commit + push the claim file.",
+          "note": ""
+        },
+        {
+          "label": "Promosikan payment-api ke stable (direview owner)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py promote --id payment-api --by assistant --reviewer owner --reason dicek owner, jalan --features-dir team/features",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: payment-api promoted experimental -> stable (reviewed by owner).",
+          "note": ""
+        },
+        {
+          "label": "Validasi ulang: bersih — PRD done, fitur stable, klaim dilepas",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: OK — 3 roster member(s), 2 claim(s), 3 feature(s), 2 PRD item(s) cross-checked; 12 team/ file(s) scanned for secrets/PII.",
+          "note": "Dua lapis gerbang: status cegah 'done' tanpa fitur terdaftar, validate cegah 'done' tanpa fitur stable."
+        },
+        {
+          "label": "Validasi akhir semua file tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: OK — 3 roster member(s), 2 claim(s), 3 feature(s), 2 PRD item(s) cross-checked; 12 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-104": {
+            "status": "released",
+            "version": null,
+            "owner": "assistant",
+            "released_by": "assistant"
+          }
+        },
+        "features": {
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "payment-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "prd-002": {
+            "status": "done",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Fitur dibatalkan di tengah jalan",
+      "team": "Tim toko online (2 AI + owner)",
+      "story": "Assistant lagi garap monitor harga. Owner memutuskan fitur itu dibatalkan — diganti layanan luar. Pembatalan harus sampai ke semua anggota tim, bukan cuma yang membatalkan.",
+      "tanpa_roster": "Owner batalkan fitur di chat. Assistant tidak baca, lanjut garap, push — kerjaan seminggu jadi sampah, dan tidak ada yang tahu sampai review.",
+      "steps": [
+        {
+          "label": "[work-a] Assistant klaim monitor harga (t-105)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-105 --title Tambah alert diskon ke monitor --owner assistant --files scripts/monitor_harga.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-105 claimed by assistant for 2h — files: scripts/monitor_harga.py\nCommit trailer to use on every commit touching these files: [claim #1]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": ""
+        },
+        {
+          "label": "[work-b] Owner BATALKAN price-monitor (alasan tercatat)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py cancel --id price-monitor --by owner --reason Diganti layanan luar, monitor harga pindah --features-dir team/features",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: price-monitor cancelled by owner (Diganti layanan luar, monitor harga pindah). It stays in the registry — do not rebuild it.\nFEATURES: released 1 active claim(s) on its files: t-105. Commit + push the feature file AND the released claim file(s).",
+          "note": "Cancel melepas klaim aktif yang menyentuh file fitur itu — di push yang sama."
+        },
+        {
+          "label": "[work-a] Assistant cek remote sebelum push (sync_check)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --files scripts/monitor_harga.py --owner assistant",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "SYNC CHECK: FAIL — the remote moved while you were working:\n  - feature price-monitor was CANCELLED on the remote by owner (Diganti layanan luar, monitor harga pindah) — your claim t-105 still touches scripts/monitor_harga.py; release it and stop work\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "note": "Remote sudah membatalkan fitur yang klaim lokal sentuh — push DITAHAN, kerja dihentikan."
+        },
+        {
+          "label": "[work-a] Cek klaim setelah tarik remote: t-105 sudah dilepas",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster --config team/config.json",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\nCLAIM CHECK: OK — 2 claim(s), 0 blocking, no conflicts.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-105": {
+            "status": "released",
+            "version": null,
+            "owner": "assistant",
+            "released_by": "cancel:owner"
+          }
+        },
+        "features": {
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "cancelled",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
+    },
+    {
+      "id": "s5",
+      "title": "Kontrak diganti seenaknya",
+      "team": "Tim bangun website",
+      "story": "login-api adalah kontrak: banyak fitur bergantung padanya. Assistant mau mengganti entry-nya — sistem menuntut alasan dan bump major, lalu memberi tahu semua yang bergantung.",
+      "tanpa_roster": "Entry login diganti diam-diam. Semua pemakai rusak di runtime — ketahuannya pas pelanggan tidak bisa login.",
+      "steps": [
+        {
+          "label": "Assistant menulis fungsi login_v2 di src/auth/login.py",
+          "cmd": "write src/auth/login.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "\"\"\"Example entry point for the team-roster example feature `login-api`.\n\nThis is a minimal, honest example — not a real auth system. It exists\nso the shipped example tree (`examples/starter-repo/`) passes the\nteam-roster checks out of the box: the feature registry records\n`entry: src/auth/login.py:login` and the hook verifies the file and the\nsymbol exist, and that the blob hash matches `entry_blo",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "Ganti entry kontrak TANPA alasan dan TANPA bump major",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --id login-api --by assistant --entry src/auth/login.py:login_v2 --breaking false --features-dir team/features --repo-root .",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "FEATURES: FAIL — --note is required (it goes into the changes log)",
+          "note": "Kontrak tidak boleh berubah diam-diam: butuh --bump major + --contract-change."
+        },
+        {
+          "label": "Ganti entry DENGAN --bump major + --contract-change",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --id login-api --by assistant --bump major --entry src/auth/login.py:login_v2 --contract-change login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi --breaking true --breaking-notes login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi --note Entry login diganti ke login_v2 (kontrak berubah) --features-dir team/features --repo-root .",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: login-api improved 1.0.0 -> 2.0.0 by assistant (entry: src/auth/login.py:login_v2).\nRemember: commit + push the feature file so the next AI builds on this version, not the old one.",
+          "note": "Perubahan tercatat di changes + breaking notes. login-api sekarang v2.0.0."
+        },
+        {
+          "label": "Assistant menulis src/checkout.py (kerja nyata)",
+          "cmd": "write src/checkout.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "def checkout(cart):\n    \"\"\"Checkout memakai login-api untuk sesi.\"\"\"\n    return {\"total\": sum(cart)}\n",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "Daftarkan checkout-api yang bergantung ke login-api@2.0.0",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id checkout-api --name Checkout API --does Checkout memakai login-api untuk sesi --entry src/checkout.py:checkout --files src/checkout.py --owner assistant --keywords checkout bayar --depends-on login-api@2.0.0 --status experimental --breaking false --features-dir team/features --repo-root .",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: registered checkout-api [experimental] v1.0.0 — entry src/checkout.py:checkout.\nRemember: commit + push the feature file so the next AI can find it.",
+          "note": ""
+        },
+        {
+          "label": "login-api di-bump major lagi (v3.0.0) — dependensi tertinggal",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --id login-api --by owner --bump major --contract-change tambah field device di sesi --breaking true --breaking-notes field device baru di sesi — pemakai lama harus kirim device --note Tambah field device di sesi --features-dir team/features --repo-root .",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: login-api improved 2.0.0 -> 3.0.0 by owner (entry: src/auth/login.py:login_v2).\nRemember: commit + push the feature file so the next AI builds on this version, not the old one.",
+          "note": ""
+        },
+        {
+          "label": "Validasi: checkout-api ketinggalan major — PERINGATAN reverify",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! feature checkout-api: needs reverify — dependency login-api is now v3.0.0 (was v2.0.0, MAJOR bump); run features.py reverify --id checkout-api --by <you> after reading the new code\n  ! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: OK — 3 roster member(s), 1 claim(s), 3 feature(s), 1 PRD item(s) cross-checked; 10 team/ file(s) scanned for secrets/PII.",
+          "note": "Validate tidak gagal, tapi teriak: dependensi sudah major di depan, reverify dulu."
+        },
+        {
+          "label": "Reverify checkout-api ke versi dependensi terbaru",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py reverify --id checkout-api --by assistant --features-dir team/features --repo-root .",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: checkout-api re-verified by assistant — entry src/checkout.py:checkout, blob a70a8933d6d2ad84715bb6e2753efa3e372387ba\nFEATURES: dependency refreshed: login-api 2.0.0 -> 3.0.0",
+          "note": ""
+        },
+        {
+          "label": "Validasi ulang: bersih",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: OK — 3 roster member(s), 1 claim(s), 3 feature(s), 1 PRD item(s) cross-checked; 10 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        },
+        "features": {
+          "checkout-api": {
+            "status": "experimental",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          },
+          "login-api": {
+            "status": "stable",
+            "version": "3.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Orang asing ngaku teman tim",
+      "team": "Tim mana pun — inti skill ini",
+      "story": "AI baru bernama ghost-ai mau ikut kerja. Roster adalah satu-satunya identitas di sistem — kalau namanya tidak ada di daftar, dia bukan teman tim, apa pun yang dia klaim.",
+      "tanpa_roster": "AI asing ikut campur tanpa jejak: tidak ada yang tahu siapa dia, siapa yang bertanggung jawab, atau bagaimana menghubunginya kalau kerjaannya rusak.",
+      "steps": [
+        {
+          "label": "ghost-ai (tidak ada di roster) coba klaim kerjaan",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-999 --title Kerja gelap --owner ghost-ai --files src/ghost.py",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "CLAIM: FAIL — owner ghost-ai is not an active roster member",
+          "note": "Bukan anggota roster = bukan teman tim. Klaim DITOLAK."
+        },
+        {
+          "label": "Cek roster yang ada: valid",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/check_roster.py team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "ROSTER CHECK: OK — 3 member(s), 3 active, all verified within 30 days, all human-approved.\n  - assistant (ai-agent, active): assistant — drafts, monitors prices, checks comments\n  - owner (human, active): owner — decides direction, approves work\n  - teammate-1 (human, active): teammate — shares cost, tests",
+          "note": ""
+        },
+        {
+          "label": "Owner daftarkan ghost-ai — tapi verification-nya 'self-asserted'",
+          "cmd": "write team/roster/ghost-ai.json",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "{\n  \"id\": \"ghost-ai\",\n  \"name\": \"Ghost AI\",\n  \"type\": \"ai-agent\",\n  \"role\": \"agen baru \\u2014 belum jelas\",\n  \"can_do\": [\n    \"testing\"\n  ],\n  \"contact\": \"chat\",\n  \"status\": \"active\",\n  \"last_verified\": \"2026-11-14\",\n  \"added_by\": \"ghost-ai\",\n  \"added_in_pr\": \"#0\",\n  \"verification\": \"self-asserted\"\n}",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "Cek roster: entri self-asserted DITOLAK",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/check_roster.py team/roster",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "! ghost-ai: no last_seen_at — liveness unknown (warn only; the roster is a directory, not a presence system)\nROSTER CHECK: FAIL — do not push until this is fixed:\n  - ghost-ai: verification must be \"human-approved\" (got 'self-asserted') — a human must approve roster entries; see added_by / added_in_pr",
+          "note": "Roster hanya sah kalau manusia yang menyetujui — klaim sendiri tidak dihitung."
+        },
+        {
+          "label": "Owner perbaiki: verification jadi human-approved, added_by owner",
+          "cmd": "write team/roster/ghost-ai.json",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "{\n  \"id\": \"ghost-ai\",\n  \"name\": \"Ghost AI\",\n  \"type\": \"ai-agent\",\n  \"role\": \"agen baru \\u2014 testing\",\n  \"can_do\": [\n    \"testing\"\n  ],\n  \"contact\": \"chat\",\n  \"status\": \"active\",\n  \"last_verified\": \"2026-11-14\",\n  \"added_by\": \"owner\",\n  \"added_in_pr\": \"#9\",\n  \"verification\": \"human-approved\"\n}",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "Cek roster ulang: lolos",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/check_roster.py team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! ghost-ai: no last_seen_at — liveness unknown (warn only; the roster is a directory, not a presence system)\nROSTER CHECK: OK — 4 member(s), 4 active, all verified within 30 days, all human-approved.\n  - assistant (ai-agent, active): assistant — drafts, monitors prices, checks comments\n  - ghost-ai (ai-agent, active): agen baru — testing\n  - owner (human, active): owner — decides direction, approves work\n  - teammate-1 (human, active): teammate — shares cost, tests",
+          "note": ""
+        },
+        {
+          "label": "ghost-ai klaim kerjaan — sekarang dia teman tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-999 --title Testing fitur checkout --owner ghost-ai --files src/ghost.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-999 claimed by ghost-ai for 2h — files: src/ghost.py\nCommit trailer to use on every commit touching these files: [claim #1]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": "Jalurnya jelas: manusia menyetujui dulu, baru AI boleh kerja."
+        },
+        {
+          "label": "Validasi akhir semua file tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! branch freshness skipped: not in a git repo\n  ! push-range checks skipped: not in a git repo\nVALIDATE: OK — 4 roster member(s), 2 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 11 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "ghost-ai": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-999": {
+            "status": "active",
+            "version": null,
+            "owner": "ghost-ai",
+            "released_by": null
+          }
+        },
+        "features": {
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
+    }
+  ],
+  "summary": {
+    "scenarios": 6,
+    "steps": 45,
+    "gates_ok": 45,
+    "gates_failed": 0
+  }
+}
