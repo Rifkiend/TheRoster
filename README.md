@@ -38,7 +38,7 @@ No server, no protocol, no new account — just three shared files synced throug
 
 ## How it works
 
-![TheRoster workflow — load the roster, claim the work, reuse or continue a feature, verify, then push](docs/flowchart.svg)
+<p align="center"><img src="docs/flowchart.svg" width="680" alt="TheRoster workflow — load the roster, claim the work, reuse or continue a feature, verify, then push"></p>
 
 In short: **roster says who, the work ledger says who is doing what, the feature registry says what already exists** — and the hook enforces all three before every push.
 

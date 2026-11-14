@@ -5,7 +5,13 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
-## v1.3.5 — 2026-11-14: minimalist n8n-style flowchart
+## v1.3.6 — 2026-11-14: lighter flowchart, no more app crash
+
+- Flowchart rebuilt compact and light: no dotted grid, 111 KB
+  (was 243 KB), 1,116 elements (was 2,372), 1,246 pt tall (was
+  1,764 pt). README now displays it at a fixed 680 px width so the
+  GitHub mobile app does not try to render the full-size vector and
+  force-close while scrolling past it.
 
 - Redrew `docs/flowchart.svg` in n8n style: flat white cards on a
   dotted canvas, small circle ports, thin curved connections, no
