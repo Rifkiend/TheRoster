@@ -11,12 +11,14 @@
       "version": "1.0.0"
     }
   ],
+  "contract": true,
   "contributors": [
     "owner"
   ],
+  "depends_on": [],
   "does": "Login dengan email + password, mengembalikan token sesi",
   "entry": "src/auth/login.py:login",
-  "entry_blob_sha": "98660b6b806cf6d8ddddbc033a7907cc348a0569",
+  "entry_blob_sha": "bd9d9d40bd67c3dcf98b617227a5b07b13b720bf",
   "files": [
     "src/auth/login.py",
     "tests/test_login.py"
@@ -29,7 +31,7 @@
     "token"
   ],
   "kind": "code",
-  "lamport": 2,
+  "lamport": 3,
   "last_verified": "2026-11-14",
   "name": "Login API",
   "owner_id": "owner",

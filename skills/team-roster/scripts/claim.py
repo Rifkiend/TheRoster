@@ -15,7 +15,7 @@ Usage:
     python3 claim.py claim  --task t-002 --title "Kerjakan checkout" \
         --owner dev-1 --files src/checkout.py tests/test_checkout.py \
         [--artifact NAME | --area NAME] [--work-type code] \
-        [--reserves-feature login-api] [--branch feat/checkout] \
+        [--reserves-feature login-api] [--prd prd-001] [--branch feat/checkout] \
         [--hours 2] [--expected-duration 6h] \
         [--claims-dir team/claims] [--config team/config.json]
     python3 claim.py heartbeat --task t-002 [--claims-dir team/claims]
@@ -97,6 +97,12 @@ def load_claims(claims_dir):
         if isinstance(rec, dict):
             recs[stem] = rec
     return recs
+
+
+def load_prd_item(team_dir, pid):
+    """One PRD item, or None (missing / not a JSON object)."""
+    data, _err = tc.load_json_file(os.path.join(team_dir, "prd", pid + ".json"))
+    return data if isinstance(data, dict) else None
 
 
 def check_conflicts(claims, files, exclude_task=None):
@@ -187,6 +193,17 @@ def cmd_check(claims_dir, roster_path, config_path):
                 errors.append(f"{task_id}: missing/empty field: {field}")
         if c.get("status") not in STATUSES:
             errors.append(f"{task_id}: status must be one of {sorted(STATUSES)} (got {c.get('status')})")
+        prd_item = c.get("prd_item") or ""
+        if prd_item:
+            if not tc.valid_id(prd_item):
+                errors.append(f"{task_id}: prd_item id fails the id grammar")
+            else:
+                prd = load_prd_item(team_dir, prd_item)
+                if prd is None:
+                    errors.append(f"{task_id}: prd_item {prd_item} does not exist — create it with prd.py, or re-claim without --prd")
+                elif tc.is_blocking(c) and prd.get("status") in ("cancelled", "done"):
+                    errors.append(f"{task_id}: works on PRD item {prd_item}, which is {prd.get('status')} — "
+                                  "release this claim; there is nothing to work on")
         if c.get("work_type") and c["work_type"] not in WORK_TYPES:
             errors.append(f"{task_id}: work_type must be one of {sorted(WORK_TYPES)}")
         for tf in ("started_at", "expires_at", "heartbeat_at"):
@@ -322,6 +339,23 @@ def cmd_claim(args):
     if args.reserves_feature and not tc.valid_id(args.reserves_feature):
         print(f"CLAIM: FAIL — reserves-feature id {args.reserves_feature!r} fails the id grammar")
         return 1
+    prd_item = args.prd or ""
+    if prd_item and not tc.valid_id(prd_item):
+        print(f"CLAIM: FAIL — prd id {prd_item!r} fails the id grammar")
+        return 1
+    if prd_item:
+        prd = load_prd_item(team_dir, prd_item)
+        if prd is None:
+            print(f"CLAIM: FAIL — no PRD item {prd_item} (create it first: "
+                  f"python3 prd.py create --id {prd_item} --title ... --owner <you>)")
+            return 1
+        if prd.get("status") in ("cancelled", "done"):
+            print(f"CLAIM: FAIL — PRD item {prd_item} is {prd.get('status')} — there is nothing to work on")
+            return 1
+    elif cfg.get("prd_required"):
+        print("CLAIM: FAIL — team/config.json has prd_required=true: give --prd <item-id> "
+              "(create the item first with prd.py)")
+        return 1
     roster_dir = args.roster or os.path.join(team_dir, "roster")
     active, _humans, rerr = load_roster_active(roster_dir)
     if rerr:
@@ -354,6 +388,8 @@ def cmd_claim(args):
             c["expires_at"] = tc.to_utc_z(tc.now() + tc.timedelta(minutes=int(cfg["claim_ttl_minutes"] if args.hours is None else args.hours * 60)))
             if args.expected_duration:
                 c["expected_duration"] = args.expected_duration
+            if args.prd:
+                c["prd_item"] = args.prd
         rec, err = mutate(claims_dir, args.task, args.owner, "claim_renewed", renew)
         if err:
             print("CLAIM: FAIL — " + err)
@@ -397,6 +433,7 @@ def cmd_claim(args):
         "lamport": 1,
         "claim_seq": seq,
         "reserves_feature": args.reserves_feature or "",
+        "prd_item": prd_item,
         "expected_duration": args.expected_duration or "",
         "handoff_note": "",
         "released_by": "",
@@ -584,6 +621,7 @@ def main():
     sp.add_argument("--area", default="")
     sp.add_argument("--work-type", default="code", choices=sorted(WORK_TYPES))
     sp.add_argument("--reserves-feature", default="")
+    sp.add_argument("--prd", default="")
     sp.add_argument("--branch", default="")
     sp.add_argument("--hours", type=float, default=None)
     sp.add_argument("--expected-duration", default="")

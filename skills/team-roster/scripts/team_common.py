@@ -40,7 +40,7 @@ SEMVER_RE = re.compile(
 DEFAULT_CONFIG = {
     "canonical_remote": "origin",
     "canonical_branch": "main",
-    "skill_version": "2.0.0",
+    "skill_version": "2.2.0",
     "claim_ttl_minutes": 120,
     "heartbeat_minutes": 30,
     "grace_minutes": 15,
@@ -48,6 +48,12 @@ DEFAULT_CONFIG = {
     "max_files_per_claim": 10,
     "branch_freshness_commits": 20,
     "branch_freshness_days": 7,
+    # v2.2 knobs (both default off — teams opt in to the strictness):
+    # prd_required: every new claim must name a team/prd item.
+    # strict_deps: a feature whose dependency bumped MAJOR since the
+    # version it verified against FAILS validation (default: warn).
+    "prd_required": False,
+    "strict_deps": False,
 }
 
 
@@ -433,6 +439,6 @@ def team_dir_of(subdir):
     """team/claims -> team ; team -> team."""
     subdir = os.path.normpath(subdir)
     base = os.path.basename(subdir)
-    if base in ("roster", "claims", "features", "mailbox", "handoffs"):
+    if base in ("roster", "claims", "features", "mailbox", "handoffs", "prd"):
         return os.path.dirname(subdir) or "."
     return subdir

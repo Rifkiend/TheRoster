@@ -24,7 +24,9 @@ Satu fitur = satu file = satu *kemampuan* yang bisa dipanggil orang lain. Bukan 
 | `keywords` | yes | Kata kunci pencarian, 2–5 kata, lowercase, NFKC, spasi tunggal. Pikirkan kata yang akan diketik AI lain saat cari fitur ini. |
 | `owner_id` | yes | Siapa yang bertanggung jawab merawatnya. Harus ada di `team/roster/` dan `active`. |
 | `contributors` | yes | Semua roster id yang pernah memperbaiki fitur ini. |
-| `status` | yes | `stable`, `experimental`, atau `deprecated`. Pendaftaran baru default `experimental`. |
+| `status` | yes | `stable`, `experimental`, `deprecated`, atau `cancelled` (v2.2). Pendaftaran baru default `experimental`. |
+| `contract` | no | `true`/`false` (default `false`, v2.2). `true` = fitur ini interface bersama — ganti entry-nya butuh `--contract-change` + `--bump major`. |
+| `depends_on` | no | Daftar `{id, version}` (default kosong, v2.2) — versi dependency yang fitur ini sudah diverifikasi melawannya. |
 | `version` | yes | SemVer `MAJOR.MINOR.PATCH`. Aturan mekanis: tanpa leading zero, reset ke nol saat bump, naik monotonik, `0.y.z` selalu `experimental`, pre-release tidak pernah bisa `stable`. |
 | `breaking` | yes | `true`/`false` — wajib diisi saat register dan improve. |
 | `breaking_notes` | yes | Wajib diisi saat register dan improve (boleh string kosong kalau `breaking: false`). |
@@ -45,6 +47,7 @@ Satu fitur = satu file = satu *kemampuan* yang bisa dipanggil orang lain. Bukan 
 3. **Kalau ketemu yang `stable` dan kanonis: PAKAI, jangan bikin.** Import / panggil `entry`-nya — tapi cek dulu `entry_blob_sha` terhadap file saat ini: kalau blob berubah, entry itu *suspect*, reverify dulu (`features.py reverify --id login-api`) sebelum dipakai. Lalu catat pemakaian lo: `features.py use --id login-api --by t-002`.
 4. **Kalau ketemu yang `experimental`: pakai dengan hati-hati, atau perbaiki di tempat.** Klaim dulu file-nya (`claim.py`), perbaiki fitur yang sama, naikkan versinya. Jangan bikin salinan baru di sebelahnya dengan nama mirip — itu awal dari dobel. Versi in-progress di branch ditulis sebagai pre-release (`1.6.0-<branch>.1`) dengan field `branch` terisi, supaya tidak pernah disangka stabil.
 5. **Kalau ketemu yang `deprecated`: jangan pakai untuk kerjaan baru, dan jangan perbaiki.** Pakai penggantinya kalau ada. Tapi jangan hapus yang deprecated — mungkin masih ada task lama yang memakainya (cek `used_by`).
+6. **Kalau ketemu yang `cancelled`: jangan pakai, dan jangan bikin ulang.** Fitur itu dibatalin dengan sengaja — alasannya tercatat di `status_reason`. Kalau kebutuhannya muncul lagi, itu keputusan baru (fitur baru), bukan "lanjutkan yang dibatalin".
 6. **Kalau tidak ketemu: baru bikin.** Klaim file-nya dulu (aturan v1.1/v2 — dengan `reserves_feature` di klaim kalau lo sudah tahu id yang mau dipakai, lihat "Reservasi id fitur" di bawah), bikin, tes, lalu **daftarkan** sebelum push:
    ```bash
    python3 scripts/features.py register --id checkout-api --name "Checkout API" --does "Create a checkout order and return its payment link" --entry src/checkout.py:create_order --files src/checkout.py tests/test_checkout.py --owner <your-roster-id> --keywords checkout order payment --breaking false --breaking-notes ""
@@ -99,9 +102,38 @@ Yang diizinkan:
 experimental → stable
 experimental → deprecated
 stable → deprecated
+experimental → cancelled
+stable → cancelled
 ```
 
 **`deprecated → stable` DILARANG tanpa PR yang disetujui manusia.** Tidak ada transisi yang boleh lompat langkah. Setiap transisi wajib mencatat `status_reason` + `status_changed_by` + `status_changed_at` **di commit yang sama**, dan entri `changes` untuk transisi itu harus ada di commit yang sama. Promosi `experimental → stable` wajib punya `--reviewer` yang berbeda dari owner. Entry point fitur yang `deprecated` harus tetap ada — deprecate bukan delete.
+
+## Batalin fitur (v2.2) — beda sama deprecate
+
+Deprecate bilang "jangan pakai ini buat kerjaan baru". Cancel bilang "berhenti kerjain ini" — termasuk kerjaan yang lagi jalan.
+
+```bash
+python3 scripts/features.py cancel --id old-login --by <your-roster-id> --reason "PRD batalin ini"
+```
+
+- Fiturnya **tetap di registry** sebagai `cancelled` — bisa dicari, ranking paling bawah, tidak bisa dipakai atau diperbaiki. Alasan batalnya tercatat di `status_reason`, supaya AI berikutnya baca keputusannya, bukan nebak.
+- Cancel **me-release semua klaim aktif** yang menyentuh file fitur itu, di push yang sama. Yang batalin tidak perlu ngejar-ngejar yang lagi kerja.
+- Yang lagi kerja tapi klaim lokalnya masih aktif (belum fetch) akan ketemu di `sync_check`: kalau remote sudah cancel fitur yang klaimnya sentuh, pre-push check FAIL — "feature X was CANCELLED by Y, release it and stop work". Pembatalan kelihatan di fetch berikutnya, bukan seketika — `sync_check` yang bikin jeda itu aman.
+- Cuma `experimental` dan `stable` yang bisa di-cancel. Yang `deprecated` tetap jadi sejarah. Entry fitur yang `cancelled` tidak lagi diverifikasi langsung (kodenya mungkin sudah tidak ada) — tapi entry-nya tetap terdaftar, supaya tidak ada yang daftar ulang hal yang sama.
+
+## Kontrak + dependensi (v2.2) — `{}`-nya Rian
+
+Fungsi atau schema database yang dipakai dua developer itu **interface bersama** — kontrak. Tandai:
+
+```bash
+python3 scripts/features.py register --id login-api --name "Login API" --does "..." --entry src/auth/login.py:login --files src/auth/login.py --owner <you> --keywords login auth --contract --depends-on session-store@1.2.0 --breaking false --breaking-notes ""
+```
+
+- `--contract` menandai fitur sebagai interface bersama. File entry-nya sebaiknya bawa komentar `# roster-contract: <id>` (atau komentar setara di bahasa itu), supaya pembaca kode nemu registry-nya. `features.py check` cuma warning kalau marker-nya tidak ada — flag-nya sendiri yang jadi kontrol.
+- Ganti entry fitur kontrak butuh **dua hal sekaligus**: `--bump major` DAN `--contract-change "<apa yang rusak dan siapa yang harus adaptasi>"`. Ganti interface itu keputusan yang dicatat — bukan efek samping perbaikan.
+- `--depends-on id@version` mencatat versi dependency yang sudah diverifikasi. Kalau dependency naik MAJOR, validate.py warning "needs reverify" — atau FAIL kalau `strict_deps: true` di `team/config.json`. `features.py reverify` me-refresh versi tercatat setelah lo baca kode barunya. Versi tercatat yang lebih baru dari versi dependency saat ini FAIL (tidak bisa depend ke versi yang belum ada), dan depend ke fitur yang belum terdaftar FAIL.
+
+Kembali ke contoh di "Titik buta" di bawah: B sekarang tidak bisa diam-diam ganti entry login — cek blob SHA ketangkep, dan kalau login itu kontrak, improve-nya ditolak tanpa `--contract-change` + major. Yang masih belum: **notifikasi otomatis ke semua yang depend** — yang depend harus `reverify` sendiri (validate yang ngingetin).
 
 ## Reservasi id fitur (v2, audit §1.15)
 

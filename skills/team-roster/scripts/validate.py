@@ -19,6 +19,14 @@ Checks:
 - every feature file carries status_reason + status_changed_by +
   status_changed_at (status transitions are enforced at write time
   by features.py; this re-checks the fields are present).
+- PRD layer (v2.2): an item's owner must be an active roster member;
+  a done item's features must exist and be stable or cancelled; a
+  claim on a cancelled or done item FAILS; with prd_required=true
+  (team/config.json) a blocking claim without a PRD item FAILS. A
+  cancelled item whose features are still live only warns.
+- dependencies (v2.2): a recorded dependency version may not be
+  newer than the dependency's current version; a MAJOR bump upstream
+  warns "needs reverify" — or FAILS with strict_deps=true.
 - branch freshness of the checked-out branch: warn past the
   threshold, FAIL past 2x (config branch_freshness_commits/days).
 - ownership of team/ records, in the push range
@@ -72,11 +80,11 @@ TOKEN_RES = [
     re.compile(r"\b[A-Za-z0-9_-]{40,}\b"),
 ]
 URL_RE = re.compile(r"https?://\S+")
-TEAM_PREFIXES = ("team/roster", "team/claims", "team/features")
+TEAM_PREFIXES = ("team/roster", "team/claims", "team/features", "team/prd")
 
 
 def load_all(team_dir):
-    roster, claims, features = {}, {}, {}
+    roster, claims, features, prd = {}, {}, {}, {}
     for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "roster")).items():
         if isinstance(rec, dict):
             roster[stem] = rec
@@ -86,7 +94,10 @@ def load_all(team_dir):
     for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "features")).items():
         if isinstance(rec, dict):
             features[stem] = rec
-    return roster, claims, features
+    for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "prd")).items():
+        if isinstance(rec, dict):
+            prd[stem] = rec
+    return roster, claims, features, prd
 
 
 def git_log_names(range_spec, extra_args):
@@ -130,7 +141,7 @@ def main():
     team_dir = args.team
     cfg = tc.load_config(team_dir)
     errors, warnings = [], []
-    roster, claims, features = load_all(team_dir)
+    roster, claims, features, prd = load_all(team_dir)
     active_ids = {rid for rid, m in roster.items() if m.get("status") == "active"}
     all_ids = set(roster)
 
@@ -231,6 +242,69 @@ def main():
                               "who changed its status, when, and why")
         if f.get("status_changed_at") and tc.parse_time(f["status_changed_at"]) is None:
             errors.append(f"{label}: status_changed_at must be a UTC ISO-8601 timestamp ending in Z")
+
+    # ---- PRD layer (v2.2): the item must be real, and its claims
+    # must be workable ---------------------------------------------
+    for pid, item in sorted(prd.items()):
+        label = "PRD item %s" % pid
+        if not tc.valid_id(pid):
+            errors.append(f"{label}: id fails the id grammar")
+        if item.get("owner_id") not in active_ids:
+            errors.append(f"{label}: owner {item.get('owner_id')} is not an active roster member")
+        if item.get("status") not in ("planned", "in_progress", "done", "cancelled"):
+            errors.append(f"{label}: unknown status {item.get('status')!r}")
+        for fid in item.get("features") or []:
+            if not tc.valid_id(fid):
+                errors.append(f"{label}: feature id {fid!r} fails the id grammar")
+                continue
+            if item.get("status") == "done":
+                if fid not in features:
+                    errors.append(f"{label}: is done but feature {fid} is not registered — "
+                                  "a done item's features must exist")
+                elif features[fid].get("status") not in ("stable", "cancelled"):
+                    errors.append(f"{label}: is done but feature {fid} is {features[fid].get('status')} — "
+                                  "a done item's features must be stable or cancelled")
+        if item.get("status") == "cancelled":
+            for fid in item.get("features") or []:
+                if fid in features and features[fid].get("status") not in ("cancelled", "deprecated"):
+                    warnings.append(f"{label}: is cancelled but feature {fid} is still "
+                                    f"{features[fid].get('status')} — cancel it, or unlink it from this item")
+    for tid, c in sorted(claims.items()):
+        prd_item = c.get("prd_item") or ""
+        if not prd_item:
+            continue
+        if prd_item not in prd:
+            errors.append(f"claim {tid}: prd_item {prd_item} does not exist — create it with prd.py, or re-claim without --prd")
+        elif tc.is_blocking(c, cfg=cfg) and prd[prd_item].get("status") in ("cancelled", "done"):
+            errors.append(f"claim {tid}: works on PRD item {prd_item}, which is {prd[prd_item].get('status')} — "
+                          "release this claim; there is nothing to work on")
+    if cfg.get("prd_required"):
+        for tid, c in sorted(claims.items()):
+            if tc.is_blocking(c, cfg=cfg) and not (c.get("prd_item") or ""):
+                errors.append(f"claim {tid}: team/config.json has prd_required=true but this claim names no PRD item")
+
+    # ---- dependencies (v2.2): a recorded version may not be newer
+    # than what exists, and a MAJOR bump upstream means re-verify ---
+    for fid, f in sorted(features.items()):
+        label = "feature %s" % fid
+        for dep in f.get("depends_on") or []:
+            if not isinstance(dep, dict):
+                continue
+            did, ver = dep.get("id") or "", dep.get("version") or ""
+            if did not in features:
+                errors.append(f"{label}: depends on {did}, which is not registered — register the dependency first")
+                continue
+            cur = features[did].get("version")
+            if tc.parse_semver(ver) is not None and tc.parse_semver(cur) is not None:
+                if tc.parse_semver(ver) > tc.parse_semver(cur):
+                    errors.append(f"{label}: depends on {did} v{ver} but {did} is only v{cur}")
+                elif tc.parse_semver(cur)[0] > tc.parse_semver(ver)[0]:
+                    msg = (f"{label}: needs reverify — dependency {did} is now v{cur} (was v{ver}, MAJOR bump); "
+                           f"run features.py reverify --id {fid} --by <you> after reading the new code")
+                    if cfg.get("strict_deps"):
+                        errors.append(msg)
+                    else:
+                        warnings.append(msg)
 
     # ---- branch freshness (current branch) -------------------------
     root = tc.git_root()
@@ -404,7 +478,7 @@ def main():
             print(f"  - {e}")
         return 1
     print(f"VALIDATE: OK — {len(roster)} roster member(s), {len(claims)} claim(s), "
-          f"{len(features)} feature(s) cross-checked; {scanned} team/ file(s) scanned for secrets/PII.")
+          f"{len(features)} feature(s), {len(prd)} PRD item(s) cross-checked; {scanned} team/ file(s) scanned for secrets/PII.")
     return 0
 
 
