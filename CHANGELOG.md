@@ -5,7 +5,12 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
-## v1.3.4 — 2026-11-14: GitHub username is enough for contact
+## v1.3.5 — 2026-11-14: minimalist n8n-style flowchart
+
+- Redrew `docs/flowchart.svg` in n8n style: flat white cards on a
+  dotted canvas, small circle ports, thin curved connections, no
+  diamonds or heavy fills, lots of white space. Same workflow, much
+  less cramped.
 
 - Clarified `contact`: it is only a channel name. For a code team, `id`
   is the GitHub username and `contact` is just "GitHub". WhatsApp /
