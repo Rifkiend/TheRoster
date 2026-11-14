@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="TheRoster — One team. Every AI. Zero guesswork.">
   <rect width="1280" height="360" fill="#0d1117"/>
+  <rect x="1" y="1" width="1278" height="358" fill="none" stroke="#30363d" stroke-width="1"/>
 
   <!-- divider -->
   <line x1="860" y1="60" x2="860" y2="300" stroke="#21262d" stroke-width="1"/>

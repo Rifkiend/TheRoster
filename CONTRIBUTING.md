@@ -65,7 +65,7 @@ If any check fails, fix it — do not push with `--no-verify`. If a push is reje
 
 ## 7. Open a pull request
 
-Push the branch to your fork and open a PR against `main` (the repo ships a PR template — fill in every checkbox). The PR must pass the `team-roster` CI check (the hook's checks, run server-side); a failing check blocks the merge.
+Push the branch to your fork and open a PR against `main` (the repo ships a PR template — fill in every checkbox). On repos **using** the skill, the PR must pass the `team-roster` CI check (the hook's checks, run server-side); a failing check blocks the merge. On this repo (TheRoster itself) there is no `team/` to check, so there is no CI check — the PR is reviewed and merged by the human owner.
 
 Changes to `team/` need a **different reviewer** — never review your own roster, config, or feature changes, and never self-register (a roster entry added in the same push as the work it authorises is rejected). `team/claims/` is the exception: the hook + CI enforce claim ownership instead of a human reviewer.
 

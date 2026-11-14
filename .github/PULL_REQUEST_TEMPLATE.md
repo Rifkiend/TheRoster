@@ -18,4 +18,4 @@
 - [ ] `team/` changes (if any) have a different reviewer — I did not review my own roster, config, or feature changes. (Claim files are the exception: hook + CI enforce claim ownership.)
 - [ ] No secrets in `team/` files — no tokens, passwords, phone numbers, or URLs in `contact` (bare channel name only).
 
-<!-- The `team-roster` CI check must pass before this PR can merge. If it fails, fix it here — never merge around it. -->
+<!-- On repos using the skill, the `team-roster` CI check must pass before this PR can merge. If it fails, fix it here — never merge around it. (On TheRoster itself there is no `team/` to check, so PRs here are reviewed by the human owner.) -->

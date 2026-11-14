@@ -48,8 +48,6 @@ No server, no protocol, no new account — just sharded team state synced throug
 
 <p align="center"><img src="docs/flowchart.svg" width="680" alt="TheRoster workflow — load the roster, claim the work, reuse or continue a feature, verify, then push"></p>
 
-> **Note:** the flowchart above still shows v1.x file paths (`team/roster.json`, `team/work.json`, `team/features.json`) and will be redrawn in a follow-up. The workflow it shows is unchanged; only the file layout moved. In v2: roster is `team/roster/<id>.json`, claims are `team/claims/<task-id>.json`, features are `team/features/<id>.json`.
-
 In short: **roster says who, the claims say who is doing what, the feature registry says what already exists** — and the hook enforces all three before every push, with CI enforcing them again at merge time.
 
 **The blind spot (v1.4, still true in v2):** an AI only knows what it last fetched. If AI B improves a feature and pushes while AI A is still working on the old version, A does not know — until A fetches. `sync_check.py` closes that gap to seconds: it fetches the remote right before the push and fails if the remote is ahead. It cannot give true real-time awareness (that would need a server); it makes sure the blindness is caught *before* the push, not after.
@@ -144,12 +142,11 @@ If your host is not GitHub, do the equivalent there: the same scripts, run as a 
 
 ## Contributing / branch protection
 
-The rules above (require PR, require status checks, block force-push, require code-owner review) are **repo settings the owner must enable** — the skill cannot turn them on by itself:
+On this repo (`TheRoster` itself), branch protection is **on**: `main` requires a pull request (no approvals required — this is a solo-maintainer repo, and GitHub does not let you approve your own PR), force pushes and branch deletion are blocked, and no one bypasses the rule — including the owner.
 
-- GitHub → Settings → Branches → Branch protection rules → add a rule for `main`.
-- In that rule: require a pull request before merging, require status checks to pass (select `team-roster`), block force pushes and branch deletion, require review from code owners, and (for `team/` changes) require signed commits.
+What is **not** enforced here, and why: there is no required `team-roster` status check and no code-owner review on this repo, because there is no `team/` to check and no root `CODEOWNERS` — TheRoster is the skill itself, not a team using it. PRs here are reviewed by the human owner. The status check, code-owner review, and signed commits described in "CI twin + branch protection" are for repos **using** the skill — that is where they bind.
 
-Until branch protection is on, the guardrails are [CONTRIBUTING.md](CONTRIBUTING.md) (fork → feature branch → claim first → run all local checks → PR) plus the `team-roster` CI check, which fails any PR that violates the roster, claim, feature, validation, or sync rules. A contributor who ignores the guide still cannot merge a failing PR *if* the status check is required — so turn the setting on; the guide alone is not enforcement. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+For contributors, the guardrails are [CONTRIBUTING.md](CONTRIBUTING.md) (fork → feature branch → claim first → run all local checks → PR). See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ## Known limits — what still NEEDS-SERVER
 
