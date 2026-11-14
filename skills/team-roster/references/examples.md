@@ -1,61 +1,89 @@
-# Four ready rosters — copy one, replace the names
+# Four ready teams — sharded layout (v2)
 
-All four use the same schema (`references/roster-schema.md`). The point: the skill is the same file and the same 3 steps in every job. Only the people change.
+All four use the same schema (`references/roster-schema.md`, `references/conflict-prevention.md`, `references/feature-registry.md`). The point: the skill is the same file and the same 5 steps in every job. Only the people change.
+
+**Layout note (v2):** every team below is stored sharded, not as three
+monolithic files. Copy the starter repo instead of the old single files:
+
+```bash
+cp -r skills/team-roster/examples/starter-repo/* .
+# copies team/ + src/ + scripts/ — the entry files are included
+# deliberately, so features.py check passes on the copy out of the box
+# edit team/roster/*.json, team/config.json — replace every example person
+# with your real team. Do NOT hand-edit team/index.json (generated).
+```
+
+The old single-file examples (`roster.example.json`, `work.example.json`,
+`features.example.json`) were removed in v2 — do not copy them for new
+teams. To migrate a v1 tree, run `scripts/migrate_v1_to_v2.py`, which
+also accepts the `*.example.json` filenames.
 
 ## 1. Software team
 
-```json
-{
-  "team_name": "Tim Backend Checkout",
-  "updated": "2026-11-14",
-  "members": [
-    {"id": "lead", "name": "Lead", "type": "human", "role": "tech lead — reviews, merges", "can_do": ["review PR", "merge", "decide architecture"], "contact": "Slack", "status": "active", "last_verified": "2026-11-14"},
-    {"id": "dev-1", "name": "Dev 1", "type": "human", "role": "backend dev — payments", "can_do": ["write API", "fix bugs"], "contact": "Slack", "status": "active", "last_verified": "2026-11-14"},
-    {"id": "copilot", "name": "Copilot", "type": "ai-agent", "role": "coding assistant — drafts, tests", "can_do": ["draft code", "write tests"], "contact": "VS Code", "status": "active", "last_verified": "2026-11-14"}
-  ]
-}
-```
+Roster (one file per member, `team/roster/<id>.json`):
+
+- `lead.json` — human, tech lead, `can_do: ["review PR", "merge", "decide architecture"]`, contact `GitHub`, active
+- `dev-1.json` — human, backend dev (payments), `can_do: ["write API", "fix bugs"]`, contact `GitHub`, active
+- `copilot.json` — ai-agent, coding assistant, `can_do: ["draft code", "write tests"]`, contact `VS Code`, active
+
+Each member file carries `added_by`, `added_in_pr`, `verification: "human-approved"`, and `lamport: 1` — see `examples/starter-repo/team/roster/rian.json` for the full shape.
 
 ## 2. PKL group (Rian's real case)
 
-```json
-{
-  "team_name": "Teman PKL Kintap",
-  "updated": "2026-11-14",
-  "members": [
-    {"id": "rian", "name": "Rian", "type": "human", "role": "owner — decides antenna/modem, holds the budget", "can_do": ["decide purchase", "test signal"], "contact": "WhatsApp group", "status": "active", "last_verified": "2026-11-14"},
-    {"id": "teman-1", "name": "Teman 1", "type": "human", "role": "housemate — shares cost", "can_do": ["share cost", "test signal"], "contact": "WhatsApp group", "status": "active", "last_verified": "2026-11-14"},
-    {"id": "teman-2", "name": "Teman 2", "type": "human", "role": "housemate — owns a modem?", "can_do": ["lend modem"], "contact": "WhatsApp group", "status": "away", "last_verified": "2026-11-14"}
-  ]
-}
-```
+- `rian.json` — human, owner, `can_do: ["decide purchase", "test signal"]`, contact `WhatsApp group`, active
+- `teman-pkl-1.json` — human, housemate, `can_do: ["share cost", "test signal"]`, contact `WhatsApp group`, active
+- `teman-2.json` — human, housemate, `can_do: ["lend modem"]`, contact `WhatsApp group`, `away`
 
 Note the `away` member: still on the team, just cannot take new work right now. Do not delete them.
 
+Example claim for this team (`team/claims/t-002.json` shape): `rian` claims
+`scope: {"type": "artifact", "name": "alat: modem orbit"}` — one tool, one
+borrower. See `examples/starter-repo/team/claims/t-001.json` for the full claim shape.
+
 ## 3. Shopee affiliate team
 
-```json
-{
-  "team_name": "Affiliate Shopee",
-  "updated": "2026-11-14",
-  "members": [
-    {"id": "rian", "name": "Rian", "type": "human", "role": "owner — approves, runs Shopee app", "can_do": ["approve posts", "pull Komisi Ekstra links"], "contact": "WhatsApp", "status": "active", "last_verified": "2026-11-14"},
-    {"id": "rean", "name": "Rean", "type": "ai-agent", "role": "assistant — drafts, monitors, posts on Threads", "can_do": ["draft posts", "monitor prices", "check comments"], "contact": "Muse chat", "status": "active", "last_verified": "2026-11-14"}
-  ]
-}
-```
+- `rian.json` — human, owner, `can_do: ["approve posts", "pull Komisi Ekstra links"]`, contact `WhatsApp`, active
+- `rean.json` — ai-agent, assistant, `can_do: ["draft posts", "monitor prices", "check comments"]`, contact `Muse chat`, active
+
+Example claim: `rean` claims `scope: {"type": "area", "name": "slot: threads 2026-11-15 pagi"}` with `work_type: writing`. Example feature (`team/features/price-monitor.json` in the example tree): `price-monitor`, `kind: code`, `entry: scripts/monitor_harga.py:cek_harga`, stable 1.0.0.
 
 ## 4. Freelance client team
 
-```json
-{
-  "team_name": "Klien Laporan Otomatis",
-  "updated": "2026-11-14",
-  "members": [
-    {"id": "klien", "name": "Klien", "type": "human", "role": "client — approves the report format, pays", "can_do": ["approve format", "pay invoice"], "contact": "email", "status": "active", "last_verified": "2026-11-14"},
-    {"id": "rian", "name": "Rian", "type": "human", "role": "freelancer — builds Excel/Python automation", "can_do": ["build report script", "fix formulas"], "contact": "email", "status": "active", "last_verified": "2026-11-14"}
-  ]
-}
+- `klien.json` — human, client, `can_do: ["approve format", "pay invoice"]`, contact `email`, active
+- `rian.json` — human, freelancer, `can_do: ["build report script", "fix formulas"]`, contact `email`, active
+
+In the freelance case the client is on the roster too — the AI must not invent a second approver, and must not assign client-only work (approve, pay) to the freelancer. Example feature: `laporan-penjualan-otomatis`, `kind: code`, `entry: buat_laporan.py`, or `kind: doc` if the deliverable is the report document itself.
+
+## The example tree
+
+`skills/team-roster/examples/starter-repo/` is a complete, copyable
+starter repo — `team/` plus the entry files the example features point
+at, so all five hook checks pass on the copy out of the box:
+
+```
+examples/starter-repo/
+├── team/
+│   ├── config.json            # canonical_remote origin, branch main, TTLs, quotas
+│   ├── roster/
+│   │   ├── rian.json          # human owner
+│   │   ├── rean.json          # ai-agent assistant
+│   │   └── teman-pkl-1.json   # human teammate
+│   ├── claims/
+│   │   └── t-001.json         # rian, login-api claim, feat/login-api
+│   ├── features/
+│   │   ├── login-api.json     # stable 1.0.0, canonical, entry src/auth/login.py:login
+│   │   └── price-monitor.json # stable 1.0.0, canonical, entry scripts/monitor_harga.py:cek_harga
+│   ├── events.jsonl           # claim_created + 2× feature_registered
+│   ├── mailbox/
+│   │   └── rean.jsonl         # one example message from rian
+│   ├── .gitattributes         # events.jsonl merge=union
+│   └── .gitignore             # index.json is generated, never committed
+├── src/auth/login.py          # the login-api entry file
+├── scripts/monitor_harga.py  # the price-monitor entry file
+└── tests/test_login.py        # smoke test for the example entry point
 ```
 
-In the freelance case the client is on the roster too — the AI must not invent a second approver, and must not assign client-only work (approve, pay) to the freelancer.
+`team/index.json` is intentionally NOT in the example tree — it is
+generated by the scripts from the record files, never hand-edited.
+`team/handoffs/` starts empty: a handoff record is created only when a claim
+actually transfers.

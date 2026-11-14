@@ -1,0 +1,7 @@
+# team-roster v2: the event log is append-only (one line per event),
+# so git's union merge driver — take lines from both sides — is safe
+# here and ONLY here. Never use merge=union on record files: two
+# agents editing the same claim/feature file MUST conflict, so a human
+# (or the hook) sees it. This file is part of the team tree — copy it
+# together with roster/, claims/, features/.
+events.jsonl merge=union

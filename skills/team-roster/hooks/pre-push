@@ -1,26 +1,47 @@
 #!/bin/bash
-# Git pre-push hook — team-roster skill v1.4.
-# Blocks the push if the team roster is missing, invalid, or stale,
-# OR if the work ledger has a double claim / unknown owner,
-# OR if the feature registry has a duplicate id / entry / unknown owner,
-# OR if the remote moved while you were working (a feature version is
-# newer on the remote, or a remote active claim covers your files).
-# Installed by scripts/install-hook.sh into .git/hooks/pre-push
+# Git pre-push hook — team-roster skill v2.0.
+# Blocks the push if any of these fail (in this order):
+#   1. roster check    — team/roster/ valid, fresh, human-approved
+#   2. claim check     — team/claims/ no double claim / unknown owner
+#   3. feature check   — team/features/ entry + blob sha verified
+#   4. cross-validate  — team/ as a whole (ownership, quotas,
+#                        renames, secrets/PII)
+#   5. remote sync     — fetch inside sync_check, then compare
+#                        per-record files against the canonical remote
+#
+# PRE-PUSH SEQUENCE (standardised, audit 2.10 / 5.1): the fetch happens
+# INSIDE sync_check, immediately before the comparison, and the push
+# must follow immediately. Never run a bare `git pull` between the
+# check and the push — pull can rebase/merge and void the check. If a
+# push is rejected, start the whole sequence again from fetch.
+# This hook must NEVER run `git pull`.
+#
+# Paths are resolved via `git rev-parse --show-toplevel` and
+# `--git-common-dir` — never hardcoded paths or pwd — so the hook
+# works from a subdirectory, a linked worktree, or any checkout.
+# A clock-skew warning compares local time with the latest commit's
+# author date; >5 min apart warns but does not block.
+#
 # Bypass only in an emergency, and say so in the commit message:
 #   git push --no-verify
+# (The CI twin runs the same checks server-side and cannot be
+# bypassed — a bypassed push still has to pass CI to merge.)
 set -e
-ROSTER="team/roster.json"
-if [ ! -f "$ROSTER" ]; then
-  ROSTER="friends/roster.json"
-fi
-if [ ! -f "$ROSTER" ]; then
-  ROSTER="roster.json"
-fi
-if [ ! -f "$ROSTER" ]; then
-  echo "pre-push: no roster found (looked for team/roster.json, friends/roster.json, roster.json)."
-  echo "pre-push: copy roster.example.json to team/roster.json and fill in your real team, then push again."
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+COMMON_DIR="$(git rev-parse --git-common-dir)"
+case "$COMMON_DIR" in
+  /*) HOOK_DIR="$COMMON_DIR" ;;
+  *)  HOOK_DIR="$ROOT/$COMMON_DIR" ;;
+esac
+
+TEAM="team"
+if [ ! -d "$TEAM/roster" ]; then
+  echo "pre-push: no roster found (looked for team/roster/)."
+  echo "pre-push: create team/roster/<id>.json per member, or run scripts/migrate_v1_to_v2.py on a v1 tree."
   exit 1
 fi
+
 # Find a script: prefer the skill copy, fall back to a project copy.
 find_script() {
   for candidate in "skills/team-roster/scripts/$1" ".agents/skills/team-roster/scripts/$1" ".claude/skills/team-roster/scripts/$1" ".github/skills/team-roster/scripts/$1" "scripts/$1"; do
@@ -28,46 +49,39 @@ find_script() {
   done
   return 1
 }
+
+# Clock-skew warning (audit 1.3): wall-clock expiry decisions are only
+# as good as the local clock. Warn, do not block.
+LAST_COMMIT_DATE="$(git log -1 --format=%aI 2>/dev/null || true)"
+if [ -n "$LAST_COMMIT_DATE" ]; then
+  NOW_EPOCH="$(date -u +%s)"
+  COMMIT_EPOCH="$(date -u -d "$LAST_COMMIT_DATE" +%s 2>/dev/null || echo "$NOW_EPOCH")"
+  DIFF=$(( NOW_EPOCH - COMMIT_EPOCH ))
+  if [ "$DIFF" -lt 0 ]; then DIFF=$(( -DIFF )); fi
+  if [ "$DIFF" -gt 300 ]; then
+    echo "pre-push: WARNING — local clock differs from the latest commit's author date by more than 5 minutes."
+    echo "pre-push: claim expiry is judged by wall clock; fix the clock (NTP) before trusting expiry decisions."
+  fi
+fi
+
+# 1. Roster.
 CHECK_ROSTER="$(find_script check_roster.py)" || { echo "pre-push: check_roster.py not found — cannot verify roster, blocking push."; exit 1; }
-python3 "$CHECK_ROSTER" "$ROSTER"
+python3 "$CHECK_ROSTER" "$TEAM/roster"
 
-WORK="team/work.json"
-if [ ! -f "$WORK" ]; then
-  WORK="friends/work.json"
-fi
-if [ ! -f "$WORK" ]; then
-  WORK="work.json"
-fi
-if [ -f "$WORK" ]; then
-  CLAIM="$(find_script claim.py)" || { echo "pre-push: claim.py not found — cannot verify work ledger, blocking push."; exit 1; }
-  python3 "$CLAIM" check "$WORK" --roster "$ROSTER"
-else
-  echo "pre-push: no work ledger found (team/work.json) — roster check passed, skipping claim check."
-  echo "pre-push: copy work.example.json to team/work.json to enable anti-collision checks."
-fi
+# 2. Claims.
+CLAIM="$(find_script claim.py)" || { echo "pre-push: claim.py not found — cannot verify work ledger, blocking push."; exit 1; }
+python3 "$CLAIM" check "$TEAM/claims" --roster "$TEAM/roster" --config "$TEAM/config.json"
 
-FEATURES="team/features.json"
-if [ ! -f "$FEATURES" ]; then
-  FEATURES="friends/features.json"
-fi
-if [ ! -f "$FEATURES" ]; then
-  FEATURES="features.json"
-fi
-if [ -f "$FEATURES" ]; then
-  FEAT="$(find_script features.py)" || { echo "pre-push: features.py not found — cannot verify feature registry, blocking push."; exit 1; }
-  python3 "$FEAT" check "$FEATURES" --roster "$ROSTER"
-else
-  echo "pre-push: no feature registry found (team/features.json) — skipping feature check."
-  echo "pre-push: copy features.example.json to team/features.json to enable reuse checks."
-fi
+# 3. Features (entry file + symbol + blob sha verified against the tree).
+FEAT="$(find_script features.py)" || { echo "pre-push: features.py not found — cannot verify feature registry, blocking push."; exit 1; }
+python3 "$FEAT" check "$TEAM/features" --roster "$TEAM/roster" --repo-root .
 
-# 4th check: did the remote move while you were working? (v1.4 — the
-# blind-spot check.) If there is no remote / no remote branch yet, this
-# is the first sync and the check passes with a note. If the fetch fails
-# (no network), it only warns — offline work is not blocked.
-if [ -f "$FEATURES" ]; then
-  SYNC="$(find_script sync_check.py)" || { echo "pre-push: sync_check.py not found — cannot check the remote, blocking push."; exit 1; }
-  python3 "$SYNC" "$FEATURES" "${WORK:-team/work.json}"
-else
-  echo "pre-push: no feature registry found (team/features.json) — skipping sync check."
-fi
+# 4. Cross-file validation (ownership, quotas, renames, secrets/PII).
+VALIDATE="$(find_script validate.py)" || { echo "pre-push: validate.py not found — cannot cross-validate team/, blocking push."; exit 1; }
+python3 "$VALIDATE" "$TEAM"
+
+# 5. Remote sync (fetch happens inside sync_check; never `git pull` here).
+# pre-push is invoked as: pre-push <remote-name> <remote-url>.
+SYNC="$(find_script sync_check.py)" || { echo "pre-push: sync_check.py not found — cannot check the remote, blocking push."; exit 1; }
+REMOTE="${1:-origin}"
+python3 "$SYNC" "$TEAM/features" "$TEAM/claims" --remote "$REMOTE"

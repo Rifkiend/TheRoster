@@ -1,0 +1,52 @@
+name: team-roster
+
+# CI twin for the team-roster skill (v2.0.0).
+# Runs the SAME scripts as the local pre-push hook, as a required status
+# check. The local hook is bypassable (--no-verify) and absent on fresh
+# clones; without this workflow set as a required check (see README,
+# "CI twin + branch protection"), the skill is advisory only.
+# Python 3.9+, stdlib only, no server, no network calls in the scripts
+# (except git fetch inside sync_check).
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  team-roster:
+    name: team-roster checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.9+
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Session-start self-check
+        # --ci: a CI checkout never has a local pre-push hook installed;
+        # the hook is not the CI gate — the 5 checks below are.
+        run: python3 skills/team-roster/scripts/doctor.py --ci
+
+      - name: Validate roster
+        run: python3 skills/team-roster/scripts/check_roster.py team/roster
+
+      - name: Check claims
+        # Same flags as the pre-push hook, so CI checks exactly what
+        # the hook checks locally.
+        run: python3 skills/team-roster/scripts/claim.py check team/claims --roster team/roster --config team/config.json
+
+      - name: Check features
+        run: python3 skills/team-roster/scripts/features.py check team/features --roster team/roster --repo-root .
+
+      - name: Cross-file validation
+        run: python3 skills/team-roster/scripts/validate.py team
+
+      - name: Remote sync check
+        run: python3 skills/team-roster/scripts/sync_check.py team/features team/claims

@@ -1,0 +1,4 @@
+# Python bytecode — running any team-roster script creates these next to
+# the scripts; they must never be committed (they conflict across clones).
+__pycache__/
+*.pyc

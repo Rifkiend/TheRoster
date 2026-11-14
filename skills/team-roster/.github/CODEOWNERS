@@ -1,0 +1,26 @@
+# CODEOWNERS for team-roster v2
+#
+# NOTE: @Rifkiend below is a PLACEHOLDER — the human owner of this repo.
+# Every team that adopts this skill MUST replace it with its own human
+# owner(s), e.g. @your-github-username. Until you do, review requests go
+# to the wrong person (or nobody).
+#
+# Rules:
+# - team/roster/ and team/config.json: roster changes need a human-approved
+#   PR (no self-registration). Only a human (or a roster-owner agent acting
+#   on a human-approved PR) may change who is on the team.
+# - team/features/: stable promotions and deprecations need human approval
+#   (a feature may only become stable via a PR reviewed by a different
+#   roster member; deprecated -> stable needs a human-approved PR).
+# - team/claims/ is INTENTIONALLY NOT code-owned: claim ownership is
+#   enforced by the pre-push hook + the CI twin (an agent may only
+#   create/modify/delete records it owns), not by review routing.
+#   Putting claims under CODEOWNERS would make every claim need a human
+#   review — which would defeat the point of claims (fast, agent-to-agent).
+# - team/index.json is generated, never hand-edited; no owner needed.
+# - team/events.jsonl / team/mailbox/ / team/handoffs/ are append-only
+#   records; they are covered by the hook + CI checks, not by review.
+
+team/roster/ @Rifkiend
+team/config.json @Rifkiend
+team/features/ @Rifkiend

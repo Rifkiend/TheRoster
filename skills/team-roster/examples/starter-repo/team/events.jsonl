@@ -1,0 +1,5 @@
+{"actor":"rian","base_commit":"","event":"claim_created","lamport":1,"record":"team/claims/t-001.json","task_id":"t-001","ts":"2026-11-14T10:00:00Z"}
+{"actor":"rian","base_commit":"","event":"feature_registered","lamport":1,"record":"team/features/login-api.json","task_id":"","ts":"2026-11-14T10:00:00Z"}
+{"actor":"rean","base_commit":"","event":"feature_registered","lamport":1,"record":"team/features/price-monitor.json","task_id":"","ts":"2026-11-14T10:00:00Z"}
+{"actor": "rian", "at": "2026-11-14T10:49:02Z", "base_commit": "5b4e867aa2bc860ed29f43d0b7ddea4bd17bda0e", "event": "feature_reverified", "feature_id": "login-api", "lamport": 2}
+{"actor": "rean", "at": "2026-11-14T10:49:02Z", "base_commit": "5b4e867aa2bc860ed29f43d0b7ddea4bd17bda0e", "event": "feature_reverified", "feature_id": "price-monitor", "lamport": 2}

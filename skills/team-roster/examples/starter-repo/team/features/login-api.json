@@ -1,0 +1,44 @@
+{
+  "branch": "",
+  "breaking": false,
+  "breaking_notes": "",
+  "canonical": true,
+  "changes": [
+    {
+      "by": "rian",
+      "date": "2026-11-14",
+      "note": "First version",
+      "version": "1.0.0"
+    }
+  ],
+  "contributors": [
+    "rian"
+  ],
+  "does": "Login dengan email + password, mengembalikan token sesi",
+  "entry": "src/auth/login.py:login",
+  "entry_blob_sha": "98660b6b806cf6d8ddddbc033a7907cc348a0569",
+  "files": [
+    "src/auth/login.py",
+    "tests/test_login.py"
+  ],
+  "id": "login-api",
+  "keywords": [
+    "login",
+    "auth",
+    "sesi",
+    "token"
+  ],
+  "kind": "code",
+  "lamport": 2,
+  "last_verified": "2026-11-14",
+  "name": "Login API",
+  "owner_id": "rian",
+  "status": "stable",
+  "status_changed_at": "2026-11-14T10:00:00Z",
+  "status_changed_by": "rian",
+  "status_reason": "First release, reviewed and used by t-001",
+  "used_by": [
+    "t-001"
+  ],
+  "version": "1.0.0"
+}

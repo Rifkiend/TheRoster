@@ -1,0 +1,5 @@
+# team/index.json is GENERATED (scripts/rebuild_index.py) — a local
+# cache, never hand-edited, never committed. Rebuild after any
+# merge/rebase:
+#   python3 scripts/rebuild_index.py team
+index.json
