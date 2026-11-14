@@ -1,8 +1,10 @@
 #!/bin/bash
-# Git pre-push hook — team-roster skill v1.2.
+# Git pre-push hook — team-roster skill v1.4.
 # Blocks the push if the team roster is missing, invalid, or stale,
 # OR if the work ledger has a double claim / unknown owner,
-# OR if the feature registry has a duplicate id / entry / unknown owner.
+# OR if the feature registry has a duplicate id / entry / unknown owner,
+# OR if the remote moved while you were working (a feature version is
+# newer on the remote, or a remote active claim covers your files).
 # Installed by scripts/install-hook.sh into .git/hooks/pre-push
 # Bypass only in an emergency, and say so in the commit message:
 #   git push --no-verify
@@ -57,4 +59,15 @@ if [ -f "$FEATURES" ]; then
 else
   echo "pre-push: no feature registry found (team/features.json) — skipping feature check."
   echo "pre-push: copy features.example.json to team/features.json to enable reuse checks."
+fi
+
+# 4th check: did the remote move while you were working? (v1.4 — the
+# blind-spot check.) If there is no remote / no remote branch yet, this
+# is the first sync and the check passes with a note. If the fetch fails
+# (no network), it only warns — offline work is not blocked.
+if [ -f "$FEATURES" ]; then
+  SYNC="$(find_script sync_check.py)" || { echo "pre-push: sync_check.py not found — cannot check the remote, blocking push."; exit 1; }
+  python3 "$SYNC" "$FEATURES" "${WORK:-team/work.json}"
+else
+  echo "pre-push: no feature registry found (team/features.json) — skipping sync check."
 fi

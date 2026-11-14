@@ -2,11 +2,11 @@
 name: team-roster
 description: Know your team before you start any job, don't collide with teammates who are already working, don't rebuild a feature that already exists — continue and improve it in place instead. Load the team roster first — who is on the team, what each person or agent can do, how to reach them, and when the list was last verified — then check the work ledger, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, improve it in place with a version bump when it needs to grow, and register anything genuinely new you build. Use when starting any group task, assigning work, mentioning a teammate, editing a shared file, building or improving a feature, or before pushing/committing work that involves other people. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, never rebuild a feature that is already in the registry, and never fork a feature to improve it — improve the original.
 license: MIT
-compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, and scripts/features.py; git for the pre-push hook and for syncing the roster, work ledger, and feature registry. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
+compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, and scripts/sync_check.py; git for the pre-push hook and for syncing the roster, work ledger, and feature registry. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 1.3.0
-  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place
+  version: 1.4.0
+  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place, sync-check
 ---
 
 # team-roster
@@ -100,9 +100,26 @@ python3 scripts/features.py search auth team/features.json
 
 Never delete a feature. If it is no longer wanted, deprecate it (`features.py deprecate --id old-login --replacement login-api`) and keep the entry — someone's old work may still use it (check `used_by`). Deletion is a human decision by the owner, only after `used_by` is empty and 30 days have passed since deprecation.
 
-### 5. Verify before you push
+### 5. Sync before you push
 
-Before any `git push`, commit that involves teammates, or handoff to the team, run all three checks:
+The blind spot: you pulled, worked for an hour, and pushed — meanwhile another AI improved the same feature and pushed first. You never saw their version until you pull again. Step 5 closes that gap to seconds. Do it immediately before every push, never earlier in the session:
+
+```bash
+git pull
+python3 scripts/sync_check.py team/features.json team/work.json
+```
+
+- Exit 0 = your local registry matches the remote. Safe to push — but still run the three local checks below first (the hook runs all four).
+- Exit 1 = the remote moved while you were working: a feature's remote version is NEWER than yours, or a remote active claim covers files you touched. STOP. `git pull`, re-read `team/features.json` and `team/work.json`, and continue on top of the new version — or stop if it conflicts. Never `--force push`.
+- If there is no remote / no remote branch yet, sync_check passes with a note: this push is the first sync, and the next AI will see it.
+- If the fetch fails (no network), sync_check only warns and passes — offline work is not blocked. But GitHub will reject your push if you are behind, so pull as soon as you have signal.
+- If you are about to touch files someone else may have claimed, add `--files <the files> --owner <your-roster-id>`: sync_check then also fails when a remote active claim from a different owner covers one of those files.
+
+**The simultaneous-push rule:** if two AIs push at the same time, GitHub accepts the FIRST push and rejects the second (`non-fast-forward`). The rejected pusher must `git pull`, re-read the registry and the work ledger, and reconcile — fix the conflict, continue on top of the newer version, or drop their change. Never `--force push` to win the race; that overwrites the other AI's work.
+
+Work on your own branch — one task = one branch — and merge through a pull request. Never push straight to `main`.
+
+Then run the three local checks:
 
 ```bash
 python3 scripts/check_roster.py team/roster.json
@@ -112,11 +129,11 @@ python3 scripts/features.py check team/features.json
 
 (The script paths are relative to this skill folder when testing the skill itself; in a real project, copy the scripts or point them at the project's roster/work/feature files.)
 
-- Exit 0 on all three = roster is valid and fresh, no file is claimed twice, and no feature id or entry is registered twice. Proceed.
-- Exit 1 = roster is invalid/stale, the work ledger has a double claim / an owner who is not on the roster, or the feature registry has a duplicate id/entry / an owner who is not on the roster. Fix it, do not push. See the script output for exactly what is wrong.
+- Exit 0 on all four = roster is valid and fresh, no file is claimed twice, no feature id or entry is registered twice, and the remote has not moved. Proceed.
+- Exit 1 on any = roster is invalid/stale, the work ledger has a double claim / an owner who is not on the roster, the feature registry has a duplicate id/entry / an owner who is not on the roster, or the remote is ahead of you. Fix it, do not push. See the script output for exactly what is wrong.
 - A roster is stale when any `active` member has `last_verified` more than 30 days ago. Update `last_verified` only after actually checking that the person is still on the team in that role — never just change the date.
 
-The `hooks/pre-push` file in this skill is a ready git hook: install it with `scripts/install-hook.sh` and git will run all three checks automatically on every push.
+The `hooks/pre-push` file in this skill is a ready git hook: install it with `scripts/install-hook.sh` and git will run all four checks automatically on every push.
 
 ## Roster format
 
@@ -166,4 +183,5 @@ Rules for the file itself:
 - `scripts/check_roster.py` — roster validator. Run it before push.
 - `scripts/claim.py` — claim / release / list / check work. Run it before touching shared work.
 - `scripts/features.py` — search / register / use / improve / deprecate / check features. Run it before building anything, and `improve` it when continuing someone else's feature.
+- `scripts/sync_check.py` — fetch the remote and compare feature versions and active claims before you push. The blind-spot check: it fails if the remote moved while you were working.
 - `scripts/install-hook.sh` — installs `hooks/pre-push` into `.git/hooks/`.

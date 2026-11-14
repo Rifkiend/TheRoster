@@ -5,6 +5,32 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
+## v1.4.0 — 2026-11-14: remote sync check, close the blind spot
+
+- Rian's question: if AI B improves AI A's feature and pushes, does A
+  know? Honest answer: no, not in real time — A only knows when A
+  pulls. New script `scripts/sync_check.py` (stdlib only, ~150 lines)
+  closes the gap to seconds: it fetches the remote right before the
+  push and FAILS if a feature version is newer on the remote, or a
+  remote active claim covers your `--files`. No remote / no remote
+  branch yet = first sync, passes with a note. Fetch fails (no
+  network) = warning only, exit 0 — offline work is not blocked.
+- Pre-push hook now runs all four checks (roster, work ledger, feature
+  registry, remote sync). `install-hook.sh` updated.
+- SKILL.md step 5 is now "Sync before you push": pull, run sync_check,
+  re-read the registry; if the remote is newer, STOP, pull, and
+  continue on top of it. Simultaneous-push rule: GitHub accepts the
+  first push and rejects the second (non-fast-forward) — the rejected
+  pusher pulls and reconciles, never `--force push`. One task = one
+  branch, merge via PR, never push direct to `main`.
+- New section in `references/feature-registry.md`: "Titik buta AI A —
+  dan cara menutupnya" (the blind-spot window, how sync_check shrinks
+  it, and what still cannot be fixed — true real-time awareness needs
+  a server, which this skill deliberately does not have). Cross-
+  reference added in `references/conflict-prevention.md`.
+- README: badge v1.4.0, new v1.4 blockquote, step 5, blind-spot note
+  under How it works, `sync_check.py` in the file tree.
+
 ## v1.3.6 — 2026-11-14: lighter flowchart, no more app crash
 
 - Flowchart rebuilt compact and light: no dotted grid, 111 KB

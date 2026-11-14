@@ -1,4 +1,4 @@
-# Feature registry — team-roster v1.2
+# Feature registry — team-roster v1.4
 
 ## Ide lo, dalam satu kalimat
 
@@ -55,6 +55,31 @@ Kapan boleh bikin fitur baru, bukan lanjutin yang lama?
 - Yang lama tidak bisa diperbaiki tanpa merusak semua pemakainya, dan sudah dibuktikan, bukan sekadar "kayaknya lebih gampang bikin baru". Kalau alasannya itu, tulis alasannya di entri baru, supaya orang berikutnya tahu.
 
 Fork diam-diam adalah dobel work dengan nama lain. Kalau ada dua entri dengan `does` yang hampir sama, salah satunya harus dideprecate dan diarahkan ke pemenang.
+
+## Titik buta AI A — dan cara menutupnya (v1.4)
+
+Skenarionya gini, persis seperti yang ditanyakan Rian:
+
+**AI A lagi develop fitur login. AI B, di tempat lain, langsung nerusin fitur login yang sama — nambah login Google, versinya naik dari 1.0.0 ke 1.1.0, terus B push. Apakah A tahu kalau fiturnya diubah?**
+
+Jawaban jujur: **tidak, belum — bukan secara real-time.** A cuma tahu apa yang A baca terakhir kali. Kalau A terakhir pull jam 10 pagi, lalu kerja sampai jam 11, semua yang B push jam 10:30 itu tidak ada di laptop A. A akan push versi 1.0.0-nya sendiri, menimpa atau bentrok dengan 1.1.0-nya B, tanpa sadar.
+
+Jendela titik butanya = **dari pull terakhir A sampai push-nya A.** Waktu itu bisa sejam, bisa seharian. Selama jendela itu, A itu "buta".
+
+**Cara menutupnya (v1.4): `scripts/sync_check.py`.** Sebelum push — detik-detik terakhir, bukan di awal sesi — A wajib jalanin ini:
+
+```bash
+git pull
+python3 scripts/sync_check.py team/features.json team/work.json
+```
+
+Script ini fetch remote, lalu bandingkan versi tiap fitur: kalau versi remote lebih baru dari versi lokal A, **FAIL — push diblokir.** A harus pull dulu, baca ulang registry-nya, terus lanjutin di atas versi terbaru B (bukan menimpa). Kalau ada klaim aktif di remote atas file yang A sentuh, FAIL juga. Hook `pre-push` menjalankan cek ini otomatis sebagai cek ke-4, jadi A tidak bisa "lupa".
+
+Dengan ini jendelanya menyusut dari **berjam-jam jadi hitungan detik** — dari pull terakhir sampai push.
+
+**Kalau push-nya barengan, gimana?** GitHub yang jadi wasit: push pertama diterima, push kedua **ditolak** (`non-fast-forward`). Yang ditolak wajib pull, baca ulang, dan beresin bentroknya — lanjut di atas versi baru, atau batalkan. Jangan pernah `--force push` buat "menang" — itu menimpa kerjaan AI satunya. Lihat juga `references/conflict-prevention.md` — aturan yang sama berlaku untuk klaim.
+
+**Yang tetap tidak bisa diperbaiki (jujur saja):** kesadaran real-time yang sesungguhnya butuh server atau channel live — semacam notifikasi "B baru saja push" yang sampai ke A dalam hitungan detik, tanpa A harus fetch dulu. Skill ini sengaja tidak punya itu: no server, no akun, no biaya. Jadi selama A belum fetch/pull, A tetap buta — dan `sync_check` hanya memastikan kebutaan itu ketahuan **sebelum** push merusak, bukan selama A bekerja. Kalau tim lo butuh yang benar-benar real-time, itu sudah di luar skill ini — butuh server yang selalu nyala.
 
 ## Aturan anti-hilang
 

@@ -4,7 +4,7 @@
 
 ### One team. Every AI. Zero guesswork.
 
-[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v1.3.1-blue)](https://agentskills.io)
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v1.4.0-blue)](https://agentskills.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-yellow.svg)](#install)
 [![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#description)
@@ -28,6 +28,8 @@ It works for any job, not just code: a software team, a PKL group, a Shopee affi
 
 > **v1.2 — reuse, don't rebuild:** roster + work ledger stop two people editing at the same time, but they don't stop two people building the same feature one after another. v1.2 adds a shared feature registry (`team/features.json`): search it before you build anything — if a stable feature already does what you need, use it directly, don't rebuild it. If you build something new, register it there so the next AI finds it. Features are never deleted, only deprecated — so nothing disappears that others still use. See `skills/team-roster/references/feature-registry.md`.
 
+> **v1.4 — close the blind spot:** AI A does not know in real time when AI B improves the same feature and pushes — A only learns it when A pulls. So v1.4 adds `scripts/sync_check.py`, run by the pre-push hook as the 4th check: fetch the remote right before pushing and fail if a feature version is newer on the remote, or a remote active claim covers your files. That shrinks the blind-spot window from hours to seconds. Simultaneous pushes are decided by GitHub: first push wins, second is rejected and must pull and reconcile — never `--force push`. True real-time awareness would need a server, which this skill deliberately does not have. See `skills/team-roster/references/feature-registry.md`.
+
 > **v1.3 — continue in place, don't fork:** the normal case is not "build new" — it is "the first AI built something good, the second AI continues it directly." v1.3 adds `features.py improve`: claim the feature's files, change the same files, keep the same `id` and `entry` when old callers must keep working, bump the version (`patch` bug fix, `minor` new compatible capability, `major` only when the entry changes), and record the improver in `contributors` + `changes`. Same capability = same id, higher version. A new id means a different capability.
 
 ## Description
@@ -42,13 +44,15 @@ No server, no protocol, no new account — just three shared files synced throug
 
 In short: **roster says who, the work ledger says who is doing what, the feature registry says what already exists** — and the hook enforces all three before every push.
 
+**The blind spot (v1.4):** an AI only knows what it last pulled. If AI B improves a feature and pushes while AI A is still working on the old version, A does not know — until A pulls. `sync_check.py` closes that gap to seconds: it fetches the remote right before the push and fails if the remote is ahead. It cannot give true real-time awareness (that would need a server); it makes sure the blindness is caught *before* the push, not after.
+
 ## The 5 steps (the whole skill)
 
 1. **Load the roster first** — `team/roster.json`. If there is no roster, stop and make one. Do not guess the team.
 2. **Plan only with people on the roster** — assign work only to `active` members whose `can_do` matches. If nobody can do it, say so. Do not invent a teammate.
 3. **Claim the work before you touch it** — `git pull`, then `python3 scripts/claim.py claim --task t-002 --title "Kerjakan checkout" --owner <your-id> --files src/checkout.py`, then commit + push the claim *before* you start working. If the claim fails or the push is rejected, someone else is already on it — stop. Release with `claim.py done` when finished.
 4. **Search before you build — and continue what exists** — `python3 scripts/features.py search login team/features.json`. If a stable feature exists, use its `entry` directly and record it with `features.py use --id login-api --by t-002`. If it exists but needs to grow, continue it in place: claim its files, improve the same files, and bump the version with `features.py improve --id login-api --by <your-id> --bump minor --note "Tambah login Google"`. If none exists, build it, then register it with `features.py register ...` before you push.
-5. **Verify before you push** — run `python3 scripts/check_roster.py team/roster.json`, `python3 scripts/claim.py check team/work.json`, and `python3 scripts/features.py check team/features.json`. A roster is stale when an `active` member was last verified more than 30 days ago. Stale, double-claimed, or double-registered = push blocked.
+5. **Sync before you push** — `git pull`, then `python3 scripts/sync_check.py team/features.json team/work.json`. If a feature's remote version is newer than yours, STOP, pull, re-read the registry, and continue on top of it. If two pushes happen at once, GitHub accepts the first and rejects the second — the rejected pusher pulls and reconciles, never `--force push`. Then run the three local checks: `check_roster.py`, `claim.py check`, `features.py check`. All four must pass (the pre-push hook runs them all).
 
 ## Install
 
@@ -113,9 +117,10 @@ skills/team-roster/
 │   ├── check_roster.py       # roster validator: invalid or stale (30+ days) = exit 1, push blocked
 │   ├── claim.py              # claim / release / done / list / check work — no claim, no edit
 │   ├── features.py           # search / register / use / deprecate / check features — search before you build
+│   ├── sync_check.py         # remote sync check: fail if the remote moved while you worked
 │   └── install-hook.sh       # installs hooks/pre-push into .git/hooks/
 ├── hooks/
-│   └── pre-push              # git hook — runs all three checks on every push
+│   └── pre-push              # git hook — runs all four checks on every push
 └── references/
     ├── roster-schema.md      # full JSON schema + validation rules
     ├── conflict-prevention.md # how the work ledger stops collisions, and its limits

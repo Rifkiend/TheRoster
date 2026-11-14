@@ -1,4 +1,4 @@
-# Anti-tabrakan — team-roster v1.1
+# Anti-tabrakan — team-roster v1.4
 
 ## Masalahnya
 
@@ -62,11 +62,15 @@ Lihat `references/examples.md` — tiap contoh roster sudah punya pasangan `work
 
 ## Cek cepat sebelum push
 
-`hooks/pre-push` v1.1 menjalankan dua cek, bukan satu:
+`hooks/pre-push` v1.4 menjalankan empat cek, bukan dua:
 
 ```bash
 python3 scripts/check_roster.py team/roster.json
 python3 scripts/claim.py check team/work.json
+python3 scripts/features.py check team/features.json
+python3 scripts/sync_check.py team/features.json team/work.json
 ```
 
 `claim.py check` gagal kalau: ada klaim ganda di file yang sama (dua pemilik aktif), ada klaim dari orang yang tidak ada di roster / tidak aktif, atau ada klaim yang formatnya rusak. Lepas atau perbaiki klaimnya, baru push.
+
+**Cek ke-4, `sync_check.py`, adalah penutup titik buta:** ia fetch remote dan gagal kalau versi fitur di remote lebih baru dari versi lokal lo, atau ada klaim aktif di remote atas file yang lo sentuh. Artinya: kalau AI lain sudah nerusin fitur yang sama dan push duluan, lo ketahuan sebelum push lo merusak — bukan sesudah. Penjelasan lengkapnya ada di `references/feature-registry.md`, bagian "Titik buta AI A — dan cara menutupnya".

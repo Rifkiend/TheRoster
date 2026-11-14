@@ -11,6 +11,7 @@ fi
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cp "$SKILL_DIR/hooks/pre-push" .git/hooks/pre-push
 chmod +x .git/hooks/pre-push
-echo "Installed pre-push hook. It runs check_roster.py on every git push."
+echo "Installed pre-push hook. It runs all four checks on every git push:"
+echo "  roster -> work ledger -> feature registry -> remote sync check."
 echo "If team/roster.json does not exist yet, copy the example first:"
 echo "  mkdir -p team && cp $SKILL_DIR/roster.example.json team/roster.json"
