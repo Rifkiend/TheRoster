@@ -1,6 +1,7 @@
 #!/bin/bash
-# Git pre-push hook — team-roster skill.
-# Blocks the push if the team roster is missing, invalid, or stale.
+# Git pre-push hook — team-roster skill v1.1.
+# Blocks the push if the team roster is missing, invalid, or stale,
+# OR if the work ledger has a double claim / unknown owner.
 # Installed by scripts/install-hook.sh into .git/hooks/pre-push
 # Bypass only in an emergency, and say so in the commit message:
 #   git push --no-verify
@@ -17,13 +18,27 @@ if [ ! -f "$ROSTER" ]; then
   echo "pre-push: copy roster.example.json to team/roster.json and fill in your real team, then push again."
   exit 1
 fi
-# Find the validator: prefer the skill copy, fall back to a project copy.
-SCRIPT=""
-for candidate in skills/team-roster/scripts/check_roster.py .agents/skills/team-roster/scripts/check_roster.py .claude/skills/team-roster/scripts/check_roster.py .github/skills/team-roster/scripts/check_roster.py scripts/check_roster.py; do
-  if [ -f "$candidate" ]; then SCRIPT="$candidate"; break; fi
-done
-if [ -z "$SCRIPT" ]; then
-  echo "pre-push: check_roster.py not found — cannot verify roster, blocking push."
-  exit 1
+# Find a script: prefer the skill copy, fall back to a project copy.
+find_script() {
+  for candidate in "skills/team-roster/scripts/$1" ".agents/skills/team-roster/scripts/$1" ".claude/skills/team-roster/scripts/$1" ".github/skills/team-roster/scripts/$1" "scripts/$1"; do
+    if [ -f "$candidate" ]; then echo "$candidate"; return 0; fi
+  done
+  return 1
+}
+CHECK_ROSTER="$(find_script check_roster.py)" || { echo "pre-push: check_roster.py not found — cannot verify roster, blocking push."; exit 1; }
+python3 "$CHECK_ROSTER" "$ROSTER"
+
+WORK="team/work.json"
+if [ ! -f "$WORK" ]; then
+  WORK="friends/work.json"
 fi
-python3 "$SCRIPT" "$ROSTER"
+if [ ! -f "$WORK" ]; then
+  WORK="work.json"
+fi
+if [ -f "$WORK" ]; then
+  CLAIM="$(find_script claim.py)" || { echo "pre-push: claim.py not found — cannot verify work ledger, blocking push."; exit 1; }
+  python3 "$CLAIM" check "$WORK" --roster "$ROSTER"
+else
+  echo "pre-push: no work ledger found (team/work.json) — roster check passed, skipping claim check."
+  echo "pre-push: copy work.example.json to team/work.json to enable anti-collision checks."
+fi

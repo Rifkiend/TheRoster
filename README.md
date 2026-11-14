@@ -6,11 +6,14 @@ AI models are stateless — without a written list, an AI does not know who your
 
 It works for any job, not just code: a software team, a PKL group, a Shopee affiliate team, a freelance client team, a content team. People, AI agents, and tools can all be on the roster.
 
-## The 3 steps (the whole skill)
+> **v1.1 — anti-collision:** the roster alone tells you WHO the team is, not WHO IS DOING WHAT. Two disconnected AIs can't magically see each other, so v1.1 adds a shared work ledger (`team/work.json`) synced through git: pull, claim the task + files, push the claim, then work. One file = one owner at a time. First push wins; a rejected push means someone claimed it first. This makes collisions rare, not zero — it is not real-time, and it is not a filesystem lock. See `skills/team-roster/references/conflict-prevention.md`.
+
+## The 4 steps (the whole skill)
 
 1. **Load the roster first** — `team/roster.json`. If there is no roster, stop and make one. Do not guess the team.
 2. **Plan only with people on the roster** — assign work only to `active` members whose `can_do` matches. If nobody can do it, say so. Do not invent a teammate.
-3. **Verify before you push** — run `python3 scripts/check_roster.py team/roster.json`. A roster is stale when an `active` member was last verified more than 30 days ago. Stale = push blocked.
+3. **Claim the work before you touch it** — `git pull`, then `python3 scripts/claim.py claim --task t-002 --title "Kerjakan checkout" --owner <your-id> --files src/checkout.py`, then commit + push the claim *before* you start working. If the claim fails or the push is rejected, someone else is already on it — stop. Release with `claim.py done` when finished.
+4. **Verify before you push** — run `python3 scripts/check_roster.py team/roster.json` and `python3 scripts/claim.py check team/work.json`. A roster is stale when an `active` member was last verified more than 30 days ago. Stale or double-claimed = push blocked.
 
 ## Install
 
@@ -67,16 +70,26 @@ uvx --from "git+https://github.com/agentskills/agentskills#subdirectory=skills-r
 
 ```
 skills/team-roster/
-├── SKILL.md                  # the skill — name, description, 3-step workflow
+├── SKILL.md                  # the skill — name, description, 4-step workflow
 ├── roster.example.json       # starter roster — copy to team/roster.json
+├── work.example.json         # starter work ledger — copy to team/work.json
 ├── scripts/
-│   ├── check_roster.py       # validator: invalid or stale (30+ days) = exit 1, push blocked
+│   ├── check_roster.py       # roster validator: invalid or stale (30+ days) = exit 1, push blocked
+│   ├── claim.py              # claim / release / done / list / check work — no claim, no edit
 │   └── install-hook.sh       # installs hooks/pre-push into .git/hooks/
 ├── hooks/
-│   └── pre-push              # git hook — runs the validator on every push
+│   └── pre-push              # git hook — runs both checks on every push
 └── references/
     ├── roster-schema.md      # full JSON schema + validation rules
+    ├── conflict-prevention.md # how the work ledger stops collisions, and its limits
     └── examples.md           # 4 ready rosters: software, PKL, affiliate, freelance
+```
+
+Start the work ledger the same way as the roster:
+
+```bash
+cp skills/team-roster/work.example.json team/work.json
+python3 skills/team-roster/scripts/claim.py list team/work.json
 ```
 
 ## Examples
