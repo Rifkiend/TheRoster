@@ -5,16 +5,16 @@
   "canonical": true,
   "changes": [
     {
-      "by": "rean",
+      "by": "assistant",
       "date": "2026-11-14",
       "note": "First version",
       "version": "1.0.0"
     }
   ],
   "contributors": [
-    "rean"
+    "assistant"
   ],
-  "does": "Cek harga + diskon produk Shopee 3x sehari, lapor hanya kalau berubah",
+  "does": "Cek harga + diskon produk toko 3x sehari, lapor hanya kalau berubah",
   "entry": "scripts/monitor_harga.py:cek_harga",
   "entry_blob_sha": "ecab81dec352a8ab1dec07023b783b6bc5462c7f",
   "files": [
@@ -25,17 +25,16 @@
     "harga",
     "promo",
     "diskon",
-    "shopee",
     "monitor"
   ],
   "kind": "code",
   "lamport": 2,
   "last_verified": "2026-11-14",
   "name": "Price Monitor",
-  "owner_id": "rean",
+  "owner_id": "assistant",
   "status": "stable",
   "status_changed_at": "2026-11-14T10:00:00Z",
-  "status_changed_by": "rean",
+  "status_changed_by": "assistant",
   "status_reason": "First release, running 3x daily",
   "used_by": [
     "briefing-pagi"

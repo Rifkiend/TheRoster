@@ -88,8 +88,8 @@ git fetch origin → rebase/merge eksplisit ke origin/main → re-cek klaim/fitu
 
 Prinsipnya sama, medianya beda — klaim `scope`-nya saja yang berubah (lihat "Aturan klaim"):
 
-- **Tim konten / affiliate:** yang diklaim bukan file, tapi produk/postingan: `scope: {"type": "artifact", "name": "produk: isku-kunci-sok"}` dan `scope: {"type": "area", "name": "slot: threads 2026-11-15 pagi"}`.
-- **Tim PKL / lapangan:** yang diklaim adalah tugas dan alat: `scope: {"type": "artifact", "name": "alat: modem orbit"}`. Satu alat = satu peminjam.
+- **Tim konten:** yang diklaim bukan file, tapi produk/postingan: `scope: {"type": "artifact", "name": "produk: kunci-sok"}` dan `scope: {"type": "area", "name": "slot: postingan-pagi"}`.
+- **Tim lapangan:** yang diklaim adalah tugas dan alat: `scope: {"type": "artifact", "name": "alat: modem"}`. Satu alat = satu peminjam.
 - **Freelance:** yang diklaim adalah laporan klien: `scope: {"type": "artifact", "name": "laporan: klien X — november"}`.
 
 Lihat `references/examples.md` — tiap contoh roster sudah punya pasangan klaim versi pekerjaan itu.

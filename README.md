@@ -24,7 +24,7 @@
 
 AI models are stateless — without a written list, an AI does not know who your teammates are, so it guesses. A guessed teammate is a hallucination. This skill fixes that with one rule: **the roster is the single source of truth about the team.**
 
-It works for any job, not just code: a software team, a PKL group, a Shopee affiliate team, a freelance client team, a content team. People, AI agents, and tools can all be on the roster.
+It works for any job, not just code: a website-build team, a software team, an open-source project, a content team, a small online store, a campus group project, a freelance client team. People, AI agents, and tools can all be on the roster.
 
 ## Version history
 
@@ -47,8 +47,6 @@ No server, no protocol, no new account — just sharded team state synced throug
 ## How it works
 
 <p align="center"><img src="docs/flowchart.svg" width="680" alt="TheRoster workflow — load the roster, claim the work, reuse or continue a feature, verify, then push"></p>
-
-> **Note:** the flowchart above still shows v1.x file paths (`team/roster.json`, `team/work.json`, `team/features.json`) and will be redrawn in a follow-up. The workflow it shows is unchanged; only the file layout moved. In v2: roster is `team/roster/<id>.json`, claims are `team/claims/<task-id>.json`, features are `team/features/<id>.json`.
 
 In short: **roster says who, the claims say who is doing what, the feature registry says what already exists** — and the hook enforces all three before every push, with CI enforcing them again at merge time.
 
@@ -144,12 +142,11 @@ If your host is not GitHub, do the equivalent there: the same scripts, run as a 
 
 ## Contributing / branch protection
 
-The rules above (require PR, require status checks, block force-push, require code-owner review) are **repo settings the owner must enable** — the skill cannot turn them on by itself:
+On this repo (`TheRoster` itself), branch protection is **on**: `main` requires a pull request (no approvals required — this is a solo-maintainer repo, and GitHub does not let you approve your own PR), force pushes and branch deletion are blocked, and no one bypasses the rule — including the owner.
 
-- GitHub → Settings → Branches → Branch protection rules → add a rule for `main`.
-- In that rule: require a pull request before merging, require status checks to pass (select `team-roster`), block force pushes and branch deletion, require review from code owners, and (for `team/` changes) require signed commits.
+What is **not** enforced here, and why: there is no required `team-roster` status check and no code-owner review on this repo, because there is no `team/` to check and no root `CODEOWNERS` — TheRoster is the skill itself, not a team using it. PRs here are reviewed by the human owner. The status check, code-owner review, and signed commits described in "CI twin + branch protection" are for repos **using** the skill — that is where they bind.
 
-Until branch protection is on, the guardrails are [CONTRIBUTING.md](CONTRIBUTING.md) (fork → feature branch → claim first → run all local checks → PR) plus the `team-roster` CI check, which fails any PR that violates the roster, claim, feature, validation, or sync rules. A contributor who ignores the guide still cannot merge a failing PR *if* the status check is required — so turn the setting on; the guide alone is not enforcement. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+For contributors, the guardrails are [CONTRIBUTING.md](CONTRIBUTING.md) (fork → feature branch → claim first → run all local checks → PR). See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ## Known limits — what still NEEDS-SERVER
 
@@ -202,7 +199,7 @@ At the repo root: `CONTRIBUTING.md` (fork → feature branch → claim first →
 
 ## Examples
 
-See `skills/team-roster/references/examples.md`: a software team, a PKL group, a Shopee affiliate team, and a freelance client team — same skill, same 5 steps, only the people change. The copyable starter repo is `skills/team-roster/examples/starter-repo/`.
+See `skills/team-roster/references/examples.md`: a website-build team, a software team, an open-source project, a content team, a small online store, a campus group project, and a freelance client team — same skill, same 5 steps, only the people change. The copyable starter repo is `skills/team-roster/examples/starter-repo/`.
 
 ## Rules the skill enforces
 

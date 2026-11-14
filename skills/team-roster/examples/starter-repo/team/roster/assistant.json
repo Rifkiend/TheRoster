@@ -1,0 +1,20 @@
+{
+  "added_by": "owner",
+  "added_in_pr": "#1",
+  "can_do": [
+    "draft posts",
+    "monitor prices",
+    "check comments",
+    "research"
+  ],
+  "contact": "chat",
+  "id": "assistant",
+  "lamport": 1,
+  "last_seen_at": "2026-11-14T10:00:00Z",
+  "last_verified": "2026-11-14",
+  "name": "Assistant",
+  "role": "assistant \u2014 drafts, monitors prices, checks comments",
+  "status": "active",
+  "type": "ai-agent",
+  "verification": "human-approved"
+}

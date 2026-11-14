@@ -1,1 +1,27 @@
-{"base_commit":"","branch":"feat/login-api","claim_seq":1,"expected_duration":"2h","expires_at":"2026-11-14T12:00:00Z","files":["src/auth/login.py","tests/test_login.py"],"handoff_note":"","heartbeat_at":"2026-11-14T10:00:00Z","lamport":1,"owner_id":"rian","released_by":"","reserves_feature":"","scope":{"type":"files"},"stall_reason":"","stalled_by":"","started_at":"2026-11-14T10:00:00Z","status":"active","task":"Buat API login","task_id":"t-001","work_type":"code"}
+{
+  "base_commit": "",
+  "branch": "feat/login-api",
+  "claim_seq": 1,
+  "expected_duration": "2h",
+  "expires_at": "2026-11-14T12:00:00Z",
+  "files": [
+    "src/auth/login.py",
+    "tests/test_login.py"
+  ],
+  "handoff_note": "",
+  "heartbeat_at": "2026-11-14T10:00:00Z",
+  "lamport": 1,
+  "owner_id": "owner",
+  "released_by": "",
+  "reserves_feature": "",
+  "scope": {
+    "type": "files"
+  },
+  "stall_reason": "",
+  "stalled_by": "",
+  "started_at": "2026-11-14T10:00:00Z",
+  "status": "active",
+  "task": "Buat API login",
+  "task_id": "t-001",
+  "work_type": "code"
+}
