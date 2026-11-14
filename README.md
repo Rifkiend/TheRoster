@@ -1,5 +1,7 @@
 <div align="center">
 
+![TheRoster — one team, every AI, zero guesswork](docs/banner.svg)
+
 # 🤝 TheRoster
 
 ### One team. Every AI. Zero guesswork.
@@ -24,15 +26,17 @@ AI models are stateless — without a written list, an AI does not know who your
 
 It works for any job, not just code: a software team, a PKL group, a Shopee affiliate team, a freelance client team, a content team. People, AI agents, and tools can all be on the roster.
 
-> **v2.0 — sharded state (BREAKING):** v1 stored all team state in three monolithic files (`team/roster.json`, `team/work.json`, `team/features.json`) that every agent edited — so every push conflicted with someone else's push, and one bad merge could silently delete another agent's claims. v2 shards state by record: `team/roster/<id>.json`, `team/claims/<task-id>.json`, `team/features/<id>.json`, plus `team/config.json`, a generated `team/index.json`, an append-only `team/events.jsonl`, and `team/mailbox/<agent-id>.jsonl`. Creating a claim file IS the claim. **v2 is NOT compatible with v1 — migrate once with `python3 skills/team-roster/scripts/migrate_v1_to_v2.py`** (old files move to `team/v1-backup/`). v2 also adds heartbeats + stalled states, Lamport ordering + `claim_seq` fencing, strict id/path rules, entry-point validation with blob hashes, ownership rules for `team/` itself, quotas, branch freshness, a `doctor.py` session-start check, and a CI twin that runs the same checks server-side. See `CHANGELOG.md`.
+## Version history
 
-> **v1.4 — close the blind spot:** AI A does not know in real time when AI B improves the same feature and pushes — A only learns it when A pulls. So v1.4 added `scripts/sync_check.py`, run by the pre-push hook as the 4th check: fetch the remote right before pushing and fail if a feature version is newer on the remote, or a remote active claim covers your files. That shrinks the blind-spot window from hours to seconds. Simultaneous pushes are decided by GitHub: first push wins, second is rejected and must pull and reconcile — never `--force push`. True real-time awareness would need a server, which this skill deliberately does not have. See `skills/team-roster/references/feature-registry.md`.
+| Version | What it added |
+|---|---|
+| **v2.0** | Sharded state (**BREAKING**) — one file per roster member, claim, and feature; heartbeats, Lamport ordering, validation, `doctor.py`, CI twin. Migrate once with `migrate_v1_to_v2.py`. |
+| **v1.4** | `sync_check.py` — fetch the remote right before pushing; the blind-spot window shrinks from hours to seconds. |
+| **v1.3** | `features.py improve` — continue a feature in place, same `id`, higher version. No fork. |
+| **v1.2** | Feature registry — search before you build; reuse stable features instead of rebuilding them. |
+| **v1.1** | Work ledger — claim before you work; one file, one owner at a time. |
 
-> **v1.3 — continue in place, don't fork:** the normal case is not "build new" — it is "the first AI built something good, the second AI continues it directly." v1.3 added `features.py improve`: claim the feature's files, change the same files, keep the same `id` and `entry` when old callers must keep working, bump the version (`patch` bug fix, `minor` new compatible capability, `major` only when the entry changes), and record the improver in `contributors` + `changes`. Same capability = same id, higher version. A new `id` means a different capability.
-
-> **v1.2 — reuse, don't rebuild:** roster + work ledger stop two people editing at the same time, but they don't stop two people building the same feature one after another. v1.2 added a shared feature registry (`team/features.json`): search it before you build anything — if a stable feature already does what you need, use it directly, don't rebuild it. If you build something new, register it there so the next AI finds it. Features are never deleted, only deprecated — so nothing disappears that others still use. See `skills/team-roster/references/feature-registry.md`.
-
-> **v1.1 — anti-collision:** the roster alone tells you WHO the team is, not WHO IS DOING WHAT. Two disconnected AIs can't magically see each other, so v1.1 added a shared work ledger (`team/work.json`) synced through git: pull, claim the task + files, push the claim, then work. One file = one owner at a time. First push wins; a rejected push means someone claimed it first. This makes collisions rare, not zero — it is not real-time, and it is not a filesystem lock. See `skills/team-roster/references/conflict-prevention.md`.
+Full details: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Description
 
