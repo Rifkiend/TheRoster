@@ -1,6 +1,24 @@
-# TheRoster — team-roster, an Agent Skill
+<div align="center">
 
-**One sentence:** before you start any job, read the team list first. If someone is not on the list, they are not your teammate.
+# 🤝 TheRoster
+
+### One team. Every AI. Zero guesswork.
+
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v1.3.1-blue)](https://agentskills.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-yellow.svg)](#install)
+[![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#description)
+
+> **Give every AI the same team — so no one invents teammates,**
+> **collides on the same file, or rebuilds the same feature twice.**
+
+| 🧑‍🤝‍🧑 Know the team | 🚧 Claim the work | ♻️ Reuse, don't rebuild | 🔁 Continue in place |
+|---|---|---|---|
+| A written roster is the single source of truth. Not on the list, not your teammate. | One file, one owner at a time. Claim it, push the claim, then work. | Search the registry first. A stable feature already exists? Use it. | The second AI picks up the first AI's feature — same id, higher version. No fork, no double work. |
+
+</div>
+
+---
 
 AI models are stateless — without a written list, an AI does not know who your teammates are, so it guesses. A guessed teammate is a hallucination. This skill fixes that with one rule: **the roster is the single source of truth about the team.**
 
@@ -14,7 +32,7 @@ It works for any job, not just code: a software team, a PKL group, a Shopee affi
 
 ## Description
 
-**TheRoster is an Agent Skill so disconnected AIs know their teammates, claim work without colliding, reuse features instead of rebuilding them, and continue each other's work in place.**
+**TheRoster is an Agent Skill that gives every AI the same team — so disconnected AIs know their teammates, claim work without colliding, reuse features instead of rebuilding them, and continue each other's work in place.**
 
 No server, no protocol, no new account — just three shared files synced through git: a team roster, a work ledger, and a feature registry, plus a pre-push hook that checks all three before anything goes live.
 

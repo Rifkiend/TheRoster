@@ -5,7 +5,11 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
-## v1.3.1 — 2026-11-14: English description + flowchart
+## v1.3.2 — 2026-11-14: stylish README description
+
+- New header: centered title, tagline "One team. Every AI. Zero
+  guesswork.", badges, and a four-pillar table (know the team / claim the
+  work / reuse, don't rebuild / continue in place).
 
 - README now opens with a one-line English description and a Mermaid
   flowchart of the whole workflow (roster → plan → claim → search/reuse/
