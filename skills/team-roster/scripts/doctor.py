@@ -23,6 +23,9 @@ Checks:
 7. The installed hook's bytes match <skill-dir>/hooks/pre-push
    (WARN on mismatch — the installed copy may be intentionally
    customised, but usually it is just stale).
+8. team/events.jsonl size (WARN above 1 MB — the append-only log
+   grows forever; past months belong in team/events-archive/,
+   see scripts/archive_events.py).
 
 Exit 0 = healthy. Exit 1 = something is wrong, with install
 instructions printed. Warnings do not fail the run.
@@ -144,6 +147,17 @@ def main():
                     print("doctor: installed hook matches the skill copy OK")
             else:
                 warnings.append("skill hook source not found at %s — cannot compare bytes" % hook_src)
+
+    # 8. Event log size (warn only): the append-only log grows forever;
+    # past months belong in team/events-archive/ (archive_events.py).
+    events_path = os.path.join(team_dir, "events.jsonl")
+    if os.path.isfile(events_path):
+        size = os.path.getsize(events_path)
+        if size > 1_000_000:
+            warnings.append(
+                "team/events.jsonl is %.1f MB — run python3 "
+                "scripts/archive_events.py %s to move past months into "
+                "team/events-archive/" % (size / 1_000_000, args.team))
 
     for w in warnings:
         print(f"doctor: warning — {w}")

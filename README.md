@@ -2,11 +2,11 @@
 
 ![TheRoster — one team, every AI, zero guesswork](docs/banner.svg)
 
-# 🤝 TheRoster
+# TheRoster
 
 ### One team. Every AI. Zero guesswork.
 
-[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.0.0-blue)](https://agentskills.io)
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.1.0-blue)](https://agentskills.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-yellow.svg)](#install)
 [![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#description)
@@ -14,7 +14,7 @@
 > **Give every AI the same team — so no one invents teammates,**
 > **collides on the same file, or rebuilds the same feature twice.**
 
-| 🧑‍🤝‍🧑 Know the team | 🚧 Claim the work | ♻️ Reuse, don't rebuild | 🔁 Continue in place |
+| Know the team | Claim the work | Reuse, don't rebuild | Continue in place |
 |---|---|---|---|
 | A written roster is the single source of truth. Not on the list, not your teammate. | One task, one owner at a time. Claim it, push the claim alone, then work. | Search the registry first. A stable feature already exists? Use it. | The second AI picks up the first AI's feature — same id, higher version. No fork, no double work. |
 
@@ -30,6 +30,7 @@ It works for any job, not just code: a website-build team, a software team, an o
 
 | Version | What it added |
 |---|---|
+| **v2.1** | Event-log rotation — `archive_events.py` moves past months to `team/events-archive/`; hot log stays one month. Broader examples (website-build team first); emoji-free README. |
 | **v2.0** | Sharded state (**BREAKING**) — one file per roster member, claim, and feature; heartbeats, Lamport ordering, validation, `doctor.py`, CI twin. Migrate once with `migrate_v1_to_v2.py`. |
 | **v1.4** | `sync_check.py` — fetch the remote right before pushing; the blind-spot window shrinks from hours to seconds. |
 | **v1.3** | `features.py improve` — continue a feature in place, same `id`, higher version. No fork. |
@@ -163,7 +164,7 @@ Honest limits, stated plainly. v2 narrows every one of these; none of them is cl
 
 ```
 skills/team-roster/
-├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.0.0)
+├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.1.0)
 ├── examples/
 │   └── starter-repo/       # copyable starter repo (v2 layout) — `cp -r examples/starter-repo/* .`
 │       ├── team/           # config.json, roster/, claims/, features/, events.jsonl, mailbox/,
@@ -172,6 +173,7 @@ skills/team-roster/
 │       ├── scripts/        # monitor_harga.py — the price-monitor entry file
 │       └── tests/          # test_login.py — smoke test for the example entry point
 ├── scripts/
+│   ├── archive_events.py     # rotate past months of team/events.jsonl into team/events-archive/
 │   ├── check_roster.py       # roster validator: invalid or stale (30+ days) = exit 1, push blocked
 │   ├── claim.py              # claim / release / done / list / check work — no claim, no edit
 │   ├── features.py           # search / register / use / improve / deprecate / reverify / check

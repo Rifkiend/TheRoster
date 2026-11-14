@@ -2,10 +2,10 @@
 name: team-roster
 description: Know your team before you start any job, don't collide with teammates who are already working, don't rebuild a feature that already exists — continue and improve it in place instead. v2 stores team state sharded (one file per roster member, claim, and feature under team/, plus a generated index, event log, and mailbox), enforced by a local hook plus a CI twin. Load the roster first, check the mailbox and run doctor.py, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, and improve it in place with a version bump. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, never rebuild a feature that is already in the registry, and never fork a feature to improve it.
 license: MIT
-compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
+compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, scripts/archive_events.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 2.0.0
+  version: 2.1.0
   tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place, sync-check
 ---
 
@@ -150,6 +150,8 @@ git push --atomic
 - If there is no remote / no remote branch yet, sync_check passes with a note: this push is the first sync, and the next AI will see it.
 - If the fetch fails (no network), sync_check only warns and passes — offline work is not blocked. But GitHub will reject your push if you are behind, so fetch as soon as you have signal.
 - If you are about to touch files someone else may have claimed, add `--files <the files> --owner <your-roster-id>`: sync_check then also fails when a remote active claim from a different owner covers one of those files.
+
+**Event log retention (v2.1):** `team/events.jsonl` is append-only and unbounded — about 200–400 bytes per event, so a busy team writes ~1 MB per few thousand events, kept forever in every clone, fetch, and validation scan. No check ever reads old event lines (validate.py, the hook, and sync_check all read the record files), so old months can move out of the hot log safely: run `python3 scripts/archive_events.py team` once a month (doctor.py warns when `events.jsonl` passes 1 MB). It moves past months into `team/events-archive/YYYY-MM.jsonl` — same content, still in git, still grep-able — and leaves only the current month in the hot log. Lines without a parseable timestamp are never moved, and archives are only appended to, never rewritten. Archives use the same union merge driver: add `events-archive/*.jsonl merge=union` to `team/.gitattributes` (the starter repo already has it). Never delete history to save space — archive it.
 
 **The simultaneous-push rule:** if two AIs push at the same time, GitHub accepts the FIRST push and rejects the second (`non-fast-forward`). The rejected pusher must fetch, re-read the registry and the claims, and reconcile — fix the conflict, continue on top of the newer version, or drop their change. Never `--force push`.
 

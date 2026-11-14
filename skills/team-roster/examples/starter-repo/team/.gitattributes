@@ -5,3 +5,4 @@
 # (or the hook) sees it. This file is part of the team tree — copy it
 # together with roster/, claims/, features/.
 events.jsonl merge=union
+events-archive/*.jsonl merge=union
