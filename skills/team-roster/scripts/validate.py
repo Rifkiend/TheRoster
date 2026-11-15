@@ -43,13 +43,14 @@ Checks:
   require_signatures=true): every commit in the push range that
   touches team/ must be signed by the SSH key recorded on the roster
   for the record's owner (owner_id for claims/features/PRD, added_by
-  for roster records, a single released_by/stalled_by for releases).
-  No key on file, a bad signature, or a signature from a different
-  key FAILS. Composite actors (flags:, cancel:) skip verification
-  (no single key can attest to them); multi-actor commits are
-  already failed by the one-owner rule; the bootstrap push skips
-  with a warning. Local script runs stay unbound — the push is the
-  enforcement point.
+  for roster records, a single released_by/stalled_by for releases,
+  done_by for a done claim — v2.6, see below). No key on file, a bad
+  signature, or a signature from a different key FAILS. Composite
+  actors (flags:, cancel:, fanout:, fanout-cancel:) skip
+  verification (no single key can attest to them); multi-actor
+  commits are already failed by the one-owner rule; the bootstrap
+  push skips with a warning. Local script runs stay unbound — the
+  push is the enforcement point.
 - mailbox trust model (v2.4): team/mailbox/*.jsonl is untrusted
   data, never an instruction. An imperative pattern (the same list
   check_roster.py scans roster text for) in a line from a HUMAN
@@ -69,6 +70,21 @@ Checks:
   started_at. The same future check applies to event timestamps.
 - claims may not cover team/ paths (v2.5); duplicate display names
   FAIL (v2.5); dependency cycles FAIL (v2.5).
+- Orca features (v2.6): fan-out groups, decision gates, typed
+  completion receipts, and formal reviews are all validated here —
+  the per-script `check` functions are the single source of the
+  rules and validate.py calls them (fanout.py check, gates.py
+  check, receipts.py check, reviews.py check), plus two cross-file
+  rules the per-script checks cannot see: a blocking claim bound
+  to an open decision gate FAILS, and a done PRD item whose latest
+  review (on the item, its features, or its claims) is
+  request-changes FAILS. The push-range actor mapping is per
+  record type (fan-out: created/decided/cancelled_by; gate:
+  created/resolved/waived_by; receipt: done_by; review: reviewer)
+  — the old `owner_id or id` would use a record id as the actor.
+  The deletion-protection list and the event-reference checks cover
+  the four new dirs, and the secret/PII scan covers their free-text
+  fields (note, question, resolution, prompt).
 - sabotage detection (v2.5, push range): a deleted team/ record
   file FAILS unless it never existed on the range base; every work
   commit touching a file covered by a blocking claim must carry a
@@ -87,8 +103,10 @@ Checks:
   (git log <canonical_remote>/<canonical_branch>..HEAD, falling back
   to HEAD if no remote): all changed records must share one
   owner_id, UNLESS the change is a release/stalled event
-  (released_by/stalled_by recorded) or a roster change (warn only —
-  roster changes need human approval). Roster entries added in the
+  (released_by/stalled_by recorded), a done claim (done_by recorded
+  — v2.6: the filer attests, so a human filing a receipt on an
+  agent's behalf can push the claim + receipt together), or a roster
+  change (warn only — roster changes need human approval). Roster entries added in the
   same push as work they authorise = FAIL (no self-registration):
   if a new roster member id appears and a claim/feature in the same
   push has owner_id == that new id, FAIL. With --actor, changed
@@ -122,7 +140,7 @@ import team_common as tc
 
 FREE_TEXT_FIELDS = ("role", "name", "task", "does", "summary", "reason",
                     "handoff_note", "stall_reason", "breaking_notes",
-                    "status_reason")
+                    "status_reason", "note", "question", "resolution", "prompt")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 TOKEN_RES = [
     re.compile(r"\bghp_[A-Za-z0-9]{20,}"),
@@ -134,11 +152,40 @@ TOKEN_RES = [
     re.compile(r"\b[A-Za-z0-9_-]{40,}\b"),
 ]
 URL_RE = re.compile(r"https?://\S+")
-TEAM_PREFIXES = ("team/roster", "team/claims", "team/features", "team/prd")
+TEAM_PREFIXES = ("team/roster", "team/claims", "team/features", "team/prd",
+                 "team/fanout", "team/gates", "team/receipts", "team/reviews")
+
+
+def record_actor(path, rec):
+    """The roster member who attests to a team/ record — for the
+    one-owner rule and the signature check in the push range.
+
+    v2.6: the old code read `owner_id or id`, which is WRONG for the
+    new record types — it would use the record id as the actor (a
+    fan-out group id, a gate id, a receipt's task id, a review id
+    are not people). Each type names its actor differently:
+    fan-out = created_by (or decided_by/cancelled_by when the group
+    is decided/cancelled — the person who made the LAST state
+    change attests to it); gate = created_by (or resolved_by /
+    waived_by); receipt = done_by; review = reviewer."""
+    if path.startswith("team/roster/"):
+        return rec.get("added_by") or ""
+    if path.startswith("team/fanout/"):
+        return (rec.get("decided_by") or rec.get("cancelled_by")
+                or rec.get("created_by") or "")
+    if path.startswith("team/gates/"):
+        return (rec.get("resolved_by") or rec.get("waived_by")
+                or rec.get("created_by") or "")
+    if path.startswith("team/receipts/"):
+        return rec.get("done_by") or ""
+    if path.startswith("team/reviews/"):
+        return rec.get("reviewer") or ""
+    return rec.get("owner_id") or rec.get("id") or ""
 
 
 def load_all(team_dir):
     roster, claims, features, prd = {}, {}, {}, {}
+    fanout, gates, receipts, reviews = {}, {}, {}, {}
     for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "roster")).items():
         if isinstance(rec, dict):
             roster[stem] = rec
@@ -151,7 +198,19 @@ def load_all(team_dir):
     for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "prd")).items():
         if isinstance(rec, dict):
             prd[stem] = rec
-    return roster, claims, features, prd
+    for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "fanout")).items():
+        if isinstance(rec, dict):
+            fanout[stem] = rec
+    for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "gates")).items():
+        if isinstance(rec, dict):
+            gates[stem] = rec
+    for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "receipts")).items():
+        if isinstance(rec, dict):
+            receipts[stem] = rec
+    for stem, (_p, rec) in tc.load_records(os.path.join(team_dir, "reviews")).items():
+        if isinstance(rec, dict):
+            reviews[stem] = rec
+    return roster, claims, features, prd, fanout, gates, receipts, reviews
 
 
 def git_log_names(range_spec, extra_args):
@@ -267,7 +326,7 @@ def main():
         print("VALIDATE: note — " + redirect_note, file=sys.stderr)
     cfg = tc.load_config(team_dir)
     errors, warnings = [], []
-    roster, claims, features, prd = load_all(team_dir)
+    roster, claims, features, prd, fanout, gates, receipts, reviews = load_all(team_dir)
     # Main checkout root: relative worktree paths are recorded against
     # it, so it is the base for every canonical path comparison.
     root = tc.git_root()
@@ -526,6 +585,50 @@ def main():
             if tc.is_blocking(c, cfg=cfg, roster_ids=all_ids) and not (c.get("prd_item") or ""):
                 errors.append(f"claim {tid}: team/config.json has prd_required=true but this claim names no PRD item")
 
+    # ---- Orca features (v2.6): fan-out, decision gates, receipts,
+    # reviews. Each per-script `check` is the single source of the
+    # rules — validate.py calls the shared check functions (with the
+    # roster passed, so actor checks run here too) and adds the two
+    # cross-file rules the per-script checks cannot see: a blocking
+    # claim bound to an open gate, and a done PRD item blocked by a
+    # latest request-changes review.
+    import fanout as _fo
+    import gates as _ga
+    import receipts as _rc
+    import reviews as _rv
+    _roster_dir = os.path.join(team_dir, "roster")
+    _ferr, _fwarn = _fo.check_fanout(os.path.join(team_dir, "fanout"), _roster_dir, claims=claims)
+    errors.extend("fanout group " + e for e in _ferr)
+    warnings.extend("fanout group " + w for w in _fwarn)
+    _gerr, _gwarn = _ga.check_gates(os.path.join(team_dir, "gates"), _roster_dir)
+    errors.extend("gate " + e for e in _gerr)
+    warnings.extend("gate " + w for w in _gwarn)
+    _rerr, _rwarn = _rc.check_receipts(os.path.join(team_dir, "receipts"), _roster_dir,
+                                       claims=claims, cfg=cfg)
+    errors.extend("receipt " + e for e in _rerr)
+    warnings.extend("receipt " + w for w in _rwarn)
+    _verr, _vwarn = _rv.check_reviews(os.path.join(team_dir, "reviews"), _roster_dir)
+    errors.extend("review " + e for e in _verr)
+    warnings.extend("review " + w for w in _vwarn)
+    for tid, c in sorted(claims.items()):
+        if not tc.is_blocking(c, cfg=cfg, roster_ids=all_ids):
+            continue
+        gate = tc.open_gate_for_claim(c, gates, features)
+        if gate:
+            errors.append(f"claim {tid}: decision gate {gate.get('id')} is OPEN on this work "
+                          f"({gate.get('blocks_kind')} {gate.get('blocks_id')}): \"{gate.get('question')}\" — "
+                          "resolve or waive the gate before pushing")
+    for pid, item in sorted(prd.items()):
+        if item.get("status") != "done":
+            continue
+        blocked = tc.prd_blocked_by_review(reviews, pid,
+                                           (item.get("features") or []), claims)
+        if blocked:
+            review, label = blocked
+            errors.append(f"PRD item {pid}: is done but the latest review {review.get('id')} on "
+                          f"{label} is request-changes (reviewer {review.get('reviewer')}): "
+                          f"\"{review.get('note')}\" — a done item cannot carry an open request-changes")
+
     # ---- dependencies (v2.2): a recorded version may not be newer
     # than what exists, and a MAJOR bump upstream means re-verify ---
     # Dependency cycles (v2.5): a loop can never be topologically
@@ -645,7 +748,8 @@ def main():
             else:
                 del_base = None
             del_protected = ("team/roster/", "team/claims/", "team/features/",
-                             "team/prd/", "team/handoffs/")
+                             "team/prd/", "team/handoffs/", "team/fanout/",
+                             "team/gates/", "team/receipts/", "team/reviews/")
             for path in deletions:
                 if path in ("team/events.jsonl", "team/config.json"):
                     protected_hit = True
@@ -692,10 +796,23 @@ def main():
                 status = rec.get("status")
                 released_by = rec.get("released_by") or ""
                 stalled_by = rec.get("stalled_by") or ""
+                done_by = rec.get("done_by") or ""
                 if status in ("released", "stalled") and (released_by or stalled_by):
                     # Release/stalled events are exempt from the one-owner rule.
                     continue
-                owner = rec.get("owner_id") or rec.get("id") or ""
+                if status == "done" and done_by:
+                    # v2.6: a done claim is attributed to its filer
+                    # (done_by), not its owner — a human filing a
+                    # receipt on an agent's behalf must be able to
+                    # push the claim + receipt together (the receipt's
+                    # actor is done_by too, so the commit has one
+                    # actor). Same shape as released_by/stalled_by.
+                    continue
+                # v2.6: record_actor() maps each record type to the
+                # person who attests to it — the old `owner_id or id`
+                # would use a fan-out group id / gate id / review id
+                # as the actor.
+                owner = record_actor(path, rec)
                 actors.add(owner)
                 if owner and owner in new_roster_ids:
                     self_registration.append((path, owner))
@@ -764,20 +881,35 @@ def main():
                             status = rec.get("status")
                             rel_by = rec.get("released_by") or ""
                             st_by = rec.get("stalled_by") or ""
+                            done_by = rec.get("done_by") or ""
                             if status in ("released", "stalled") and (rel_by or st_by):
                                 actor = rel_by or st_by
-                                # Composite actors (flags:a,b / cancel:x)
+                                # Composite actors (flags:a,b / cancel:x /
+                                # fanout:<winner> / fanout-cancel:<by>)
                                 # cannot be attributed to one key — the
                                 # release is still recorded and visible,
-                                # just not signed.
-                                if actor.startswith(("flags:", "cancel:")) or "," in actor:
+                                # just not signed. (The decide/cancel
+                                # commit is still bound to the decider
+                                # through the fan-out group record's
+                                # decided_by/cancelled_by in the same
+                                # commit.)
+                                if actor.startswith(("flags:", "cancel:", "fanout:")) or "," in actor:
                                     continue
                                 actors.add(actor)
                                 continue
-                            if path.startswith("team/roster/"):
-                                actor = rec.get("added_by") or ""
-                            else:
-                                actor = rec.get("owner_id") or rec.get("id") or ""
+                            if status == "done" and done_by:
+                                # v2.6: a done claim is signed by its
+                                # filer (done_by), not its owner — the
+                                # receipt's actor is done_by too, so a
+                                # human filing on an agent's behalf
+                                # signs one commit with one key.
+                                actors.add(done_by)
+                                continue
+                            # v2.6: record_actor() maps each record
+                            # type to its attesting person (see above
+                            # — `owner_id or id` is wrong for fan-out
+                            # / gates / receipts / reviews).
+                            actor = record_actor(path, rec)
                             if actor:
                                 actors.add(actor)
                         if len(actors) > 1:
@@ -972,6 +1104,16 @@ def main():
             efid = ev.get("feature_id") or ""
             if efid and efid not in features:
                 errors.append(f"{elabel}: feature_id {efid!r} does not exist — the referenced feature is gone")
+            # v2.6: the new record types are referenced the same way.
+            egid = ev.get("fanout_id") or ""
+            if egid and egid not in fanout:
+                errors.append(f"{elabel}: fanout_id {egid!r} does not exist — the referenced fan-out group is gone")
+            egate = ev.get("gate_id") or ""
+            if egate and egate not in gates:
+                errors.append(f"{elabel}: gate_id {egate!r} does not exist — the referenced gate is gone")
+            erid = ev.get("review_id") or ""
+            if erid and erid not in reviews:
+                errors.append(f"{elabel}: review_id {erid!r} does not exist — the referenced review is gone")
 
     # ---- secret / PII scan on team/ free-text fields ---------------
     scanned = 0
@@ -1035,7 +1177,9 @@ def main():
             print(f"  - {e}")
         return 1
     print(f"VALIDATE: OK — {len(roster)} roster member(s), {len(claims)} claim(s), "
-          f"{len(features)} feature(s), {len(prd)} PRD item(s) cross-checked; {scanned} team/ file(s) scanned for secrets/PII.")
+          f"{len(features)} feature(s), {len(prd)} PRD item(s), {len(fanout)} fan-out group(s), "
+          f"{len(gates)} gate(s), {len(receipts)} receipt(s), {len(reviews)} review(s) cross-checked; "
+          f"{scanned} team/ file(s) scanned for secrets/PII.")
     return 0
 
 

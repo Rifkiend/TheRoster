@@ -118,8 +118,9 @@ def cmd_sign(args):
     mdir = os.path.join(team_dir, "mailbox")
     os.makedirs(mdir, exist_ok=True)
     line = {"from": sender, "message": args.message, "ts": ts, "sig": sig}
-    with open(os.path.join(mdir, args.to + ".jsonl"), "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(line, ensure_ascii=False, sort_keys=True) + "\n")
+    if not tc.append_jsonl(os.path.join(mdir, args.to + ".jsonl"), line):
+        print(f"MAILBOX: FAIL — could not append to team/mailbox/{args.to}.jsonl")
+        return 1
     print(f"MAILBOX: signed line from {sender} to {args.to} appended to team/mailbox/{args.to}.jsonl "
           f"(ts {ts}). Commit + push it so the reader sees it.")
     return 0

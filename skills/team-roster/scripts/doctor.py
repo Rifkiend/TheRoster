@@ -36,6 +36,12 @@ Checks:
     git needs it to verify SSH signatures), and every active roster
     member has a public_key (WARN if not — they cannot push team/
     changes until a key is added via a human-approved roster change).
+11. Orca records (v2.6): fan-out groups, decision gates, completion
+    receipts, and formal reviews are each checked by their own
+    script (fanout.py check / gates.py check / receipts.py check /
+    reviews.py check) — a failure in any of them FAILS doctor, the
+    same as a claim/feature failure would. A missing script warns
+    only (a pre-v2.6 skill copy has no Orca scripts yet).
 
 Exit 0 = healthy. Exit 1 = something is wrong, with install
 instructions printed. Warnings do not fail the run.
@@ -229,6 +235,32 @@ def main():
                                 "(human-approved roster change)" % ", ".join(sorted(keyless)))
             else:
                 print("doctor: every active roster member has a public_key OK")
+
+    # 11. Orca records (v2.6): each of the four new record types is
+    # checked by its own script. A failure FAILS doctor (a broken
+    # gate/fan-out/receipt/review is as blocking as a broken claim);
+    # a missing script warns only (pre-v2.6 skill copies have none).
+    import subprocess
+    _orca = (("fanout.py", "fanout"), ("gates.py", "gates"),
+             ("receipts.py", "receipts"), ("reviews.py", "reviews"))
+    for _script, _subdir in _orca:
+        _spath = os.path.join(scripts_dir, _script)
+        if not os.path.isfile(_spath):
+            warnings.append(f"{_script} not found in {scripts_dir} — {_subdir} records cannot be "
+                            "checked; update the skill copy to v2.6.0")
+            continue
+        _r = subprocess.run(
+            [sys.executable, _spath, "check",
+             os.path.join(team_dir, _subdir),
+             "--roster", os.path.join(team_dir, "roster")],
+            cwd=root, capture_output=True, text=True)
+        if _r.stdout.strip():
+            print(_r.stdout.rstrip())
+        if _r.stderr.strip():
+            print(_r.stderr.rstrip(), file=sys.stderr)
+        if _r.returncode != 0:
+            problems.append(f"{_script} check FAILED on {os.path.join(args.team, _subdir)} — "
+                            f"fix the {_subdir} records (see the output above) before starting work")
 
     for w in warnings:
         print(f"doctor: warning — {w}")

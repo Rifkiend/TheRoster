@@ -28,7 +28,11 @@ Usage:
     python3 claim.py stall     --task t-002 --by dev-2 --reason "..." [--claims-dir team/claims]
     python3 claim.py flag      --task t-002 --by dev-2 --reason "..." [--claims-dir team/claims]
     python3 claim.py release   --task t-002 --by dev-1 [--claims-dir team/claims]
-    python3 claim.py done      --task t-002 [--claims-dir team/claims]
+    # Done files a typed completion receipt (v2.6) — no silent done.
+    python3 claim.py done      --task t-002 --by dev-1 --outcome succeeded \
+        --summary "Fixed the race; added a regression test." \
+        [--files-modified src/checkout.py tests/test_checkout.py] \
+        [--follow-ups "t-003: migrate the old callers"] [--key ~/.ssh/id_ed25519]
     python3 claim.py handoff   --task t-002 --to dev-2 --reason "..." \
         --summary "done X, left Y" [--claims-dir team/claims]
 
@@ -69,6 +73,23 @@ Rules:
   more than 15 minutes in the future FAIL (clock-skew gate), as do
   `expires_at` / `heartbeat_at` before `started_at`. Claims may
   not cover `team/` paths at all — the board cannot be claimed.
+- v2.6 (Orca features): `done` files a typed completion receipt
+  (team/receipts/<task-id>.json) — --outcome succeeded|failed and
+  --summary are REQUIRED; no silent done. The receipt's claim_seq
+  is the live claim's claim_seq (a stale retry cannot complete
+  the wrong attempt); with require_signatures on and a human
+  filer, the receipt MUST be signed (--key). A failed outcome
+  still marks the claim done — the attempt is over — but the PRD
+  item stays in_progress and the feature stays experimental (the
+  stability gate refuses a done item built on unfinished work).
+  A claim may join a fan-out group (--fanout-group <id>: the
+  group must exist and be open, and the member is listed in the
+  group record) or follow up a request-changes review
+  (--review <id>). A claim bound to an open decision gate is
+  REFUSED at claim time and FAILS check — same shape as a
+  cancelled feature (a gate on a claim blocks that task; on a PRD
+  item blocks any claim with --prd; on a feature blocks a claim
+  reserving it or touching its files).
 - Quotas (from team/config.json, defaults 5 claims/agent, 10
   files/claim): claiming past them FAILS.
 - handoff is the ONLY way a claim's owner changes: it writes
@@ -148,6 +169,16 @@ def load_roster_all_ids(roster_dir):
     return ids, None
 
 
+def load_roster_names(team_dir):
+    """All roster records by id (any status) — for lookups of
+    type/public_key, e.g. receipt signing in cmd_done."""
+    recs = {}
+    for _stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "roster")).items():
+        if isinstance(rec, dict) and rec.get("id"):
+            recs[rec["id"]] = rec
+    return recs
+
+
 def load_claims(claims_dir):
     recs = {}
     for stem, (_path, rec) in tc.load_records(claims_dir).items():
@@ -160,6 +191,91 @@ def load_prd_item(team_dir, pid):
     """One PRD item, or None (missing / not a JSON object)."""
     data, _err = tc.load_json_file(os.path.join(team_dir, "prd", pid + ".json"))
     return data if isinstance(data, dict) else None
+
+
+def load_gates(team_dir):
+    """All gate records (id -> record). Missing dir = no gates."""
+    gates = {}
+    for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "gates")).items():
+        if isinstance(rec, dict):
+            gates[stem] = rec
+    return gates
+
+
+def load_features_map(team_dir):
+    """All feature records (id -> record). Missing dir = no features."""
+    features = {}
+    for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "features")).items():
+        if isinstance(rec, dict):
+            features[stem] = rec
+    return features
+
+
+def check_fanout_group(team_dir, group_id, task_id):
+    """Validate joining fan-out group `group_id` as `task_id`.
+
+    Returns an error string, or None. The group must exist and be
+    open, have room below max_members, and not already list this
+    task. The member-list append happens separately (see
+    append_fanout_member) after the claim is saved — a claim that
+    fails to be created must not leave a member entry behind."""
+    if not group_id:
+        return None
+    data, err = tc.load_json_file(os.path.join(team_dir, "fanout", group_id + ".json"))
+    if err or not isinstance(data, dict):
+        return "no fan-out group with id %s" % group_id
+    if data.get("status") != "open":
+        return ("fan-out group %s is %s, not open — a decided/cancelled group "
+                "takes no new members" % (group_id, data.get("status")))
+    members = data.get("members") or []
+    if len(members) >= int(data.get("max_members") or 5):
+        return ("fan-out group %s already has %d member(s) (max_members=%s)"
+                % (group_id, len(members), data.get("max_members")))
+    if any(isinstance(m, dict) and m.get("task_id") == task_id for m in members):
+        return "task %s is already a member of fan-out group %s" % (task_id, group_id)
+    return None
+
+
+def append_fanout_member(team_dir, group_id, task_id, owner, branch, worktree):
+    """Append a member entry to a fan-out group record (after the
+    claim is saved). Returns an error string, or None. Idempotent:
+    a task already listed is not added twice."""
+    path = os.path.join(team_dir, "fanout", group_id + ".json")
+    data, err = tc.load_json_file(path)
+    if err or not isinstance(data, dict):
+        return "no fan-out group with id %s" % group_id
+    if any(isinstance(m, dict) and m.get("task_id") == task_id
+           for m in (data.get("members") or [])):
+        return None
+    data.setdefault("members", []).append({
+        "task_id": task_id,
+        "owner_id": owner,
+        "branch": branch or "",
+        "worktree": worktree or "",
+        "added_at": tc.now_iso(),
+    })
+    data["lamport"] = int(data.get("lamport") or 0) + 1
+    tc.save_json(path, data)
+    tc.append_event(team_dir, "fanout_member_added", data["lamport"], owner,
+                    base_commit=tc.git_head_commit(), task_id=task_id,
+                    extra={"fanout_id": group_id})
+    rebuild(team_dir)
+    return None
+
+
+def validate_review_link(team_dir, review_id):
+    """Validate a --review link: the review must exist and its
+    verdict must be request-changes (only a request-changes review
+    takes a follow-up claim). Returns an error string, or None."""
+    if not review_id:
+        return None
+    data, err = tc.load_json_file(os.path.join(team_dir, "reviews", review_id + ".json"))
+    if err or not isinstance(data, dict):
+        return "no review with id %s" % review_id
+    if data.get("verdict") != "request-changes":
+        return ("review %s is %s — only a request-changes review takes a "
+                "follow-up claim" % (review_id, data.get("verdict")))
+    return None
 
 
 def check_conflicts(claims, files, exclude_task=None, new_claim=None,
@@ -524,6 +640,35 @@ def cmd_check(claims_dir, roster_path, config_path):
                 if entry is not None and (entry.get("branch") or "") != br:
                     errors.append(f"{t}: worktree at {wt} is on branch {entry.get('branch')}, but the claim "
                                   f"says {br} — fix the claim or the worktree")
+    # v2.6: decision gates, fan-out membership, review follow-ups.
+    gates = load_gates(team_dir)
+    features = load_features_map(team_dir)
+    for t, c in sorted(claims.items()):
+        if not tc.is_blocking(c, roster_ids=all_roster_ids):
+            continue
+        gate = tc.open_gate_for_claim(c, gates, features)
+        if gate:
+            errors.append(f"{t}: decision gate {gate.get('id')} is OPEN on this work "
+                          f"({gate.get('blocks_kind')} {gate.get('blocks_id')}): \"{gate.get('question')}\" — "
+                          "resolve or waive the gate (gates.py) before pushing")
+        group_id = c.get("fanout_group") or ""
+        if group_id:
+            gdata, _gerr = tc.load_json_file(os.path.join(team_dir, "fanout", group_id + ".json"))
+            if not isinstance(gdata, dict):
+                errors.append(f"{t}: fanout_group {group_id} does not exist — release this claim or join a real group")
+            elif not any(isinstance(m, dict) and m.get("task_id") == t
+                         for m in (gdata.get("members") or [])):
+                errors.append(f"{t}: fanout_group {group_id} exists but does not list this claim as a member — "
+                              "membership is two-sided; re-add it with fanout.py add")
+        review_id = c.get("review_id") or ""
+        if review_id:
+            rdata, _rerr = tc.load_json_file(os.path.join(team_dir, "reviews", review_id + ".json"))
+            if not isinstance(rdata, dict):
+                errors.append(f"{t}: review_id {review_id} does not exist — the follow-up review is gone; "
+                              "release this claim or re-claim without --review")
+            elif rdata.get("verdict") != "request-changes":
+                errors.append(f"{t}: review_id {review_id} is {rdata.get('verdict')} — only a "
+                              "request-changes review takes a follow-up claim")
     # Branch freshness of the checked-out branch: warn past the
     # threshold, FAIL past 2x, until rebase + re-search.
     root = tc.git_root()
@@ -646,6 +791,40 @@ def cmd_claim(args):
                        if c.get("owner_id") == args.owner and tc.is_blocking(c))
     path = claim_path(claims_dir, args.task)
     existing, _err = tc.load_json_file(path)
+    # v2.6: fan-out membership, review follow-up, decision gates.
+    # Validated here (before any conflict check) so a bad group /
+    # review / open gate fails fast, before the claim is created.
+    fanout_group = args.fanout_group or ""
+    if fanout_group and not tc.valid_id(fanout_group):
+        print(f"CLAIM: FAIL — fanout-group id {fanout_group!r} fails the id grammar")
+        return 1
+    already_member = (isinstance(existing, dict)
+                      and (existing.get("fanout_group") or "") == fanout_group
+                      and fanout_group != "")
+    if not already_member:
+        err = check_fanout_group(team_dir, fanout_group, args.task)
+        if err:
+            print("CLAIM: FAIL — " + err)
+            return 1
+    review_id = args.review or ""
+    if review_id and not tc.valid_id(review_id):
+        print(f"CLAIM: FAIL — review id {review_id!r} fails the id grammar")
+        return 1
+    err = validate_review_link(team_dir, review_id)
+    if err:
+        print("CLAIM: FAIL — " + err)
+        return 1
+    gates = load_gates(team_dir)
+    features = load_features_map(team_dir)
+    gate = tc.open_gate_for_claim(
+        {"task_id": args.task, "prd_item": prd_item,
+         "reserves_feature": args.reserves_feature, "files": files},
+        gates, features)
+    if gate:
+        print(f"CLAIM: FAIL — decision gate {gate.get('id')} is OPEN on this work "
+              f"({gate.get('blocks_kind')} {gate.get('blocks_id')}): \"{gate.get('question')}\" — "
+              "resolve or waive the gate first (gates.py), then claim")
+        return 1
     if isinstance(existing, dict) and existing.get("status") == "active":
         if existing.get("owner_id") != args.owner:
             print(f"CLAIM: FAIL — {args.task} is already actively claimed by {existing.get('owner_id')}")
@@ -691,10 +870,21 @@ def cmd_claim(args):
                 c["expected_duration"] = args.expected_duration
             if args.prd:
                 c["prd_item"] = args.prd
+            if args.fanout_group:
+                c["fanout_group"] = args.fanout_group
+            if args.review:
+                c["review_id"] = args.review
         rec, err = mutate(claims_dir, args.task, args.owner, "claim_renewed", renew)
         if err:
             print("CLAIM: FAIL — " + err)
             return 1
+        if fanout_group:
+            err = append_fanout_member(team_dir, fanout_group, args.task,
+                                       args.owner, rec.get("branch", ""),
+                                       rec.get("worktree", ""))
+            if err:
+                print("CLAIM: warning — claim renewed, but the fan-out group "
+                      "record could not be updated: " + err)
         print(f"CLAIM: renewed {args.task} for {args.hours}h — files: {', '.join(files) or '(none — ' + scope['type'] + ' scope)'}")
         print(f"Commit trailer to use: [claim #{rec['claim_seq']}]")
         print("Remember: commit + push the claim file ALONE first, before any work commits.")
@@ -741,15 +931,31 @@ def cmd_claim(args):
         "reserves_feature": args.reserves_feature or "",
         "prd_item": prd_item,
         "expected_duration": args.expected_duration or "",
+        # v2.6: fan-out membership + review follow-up (both empty
+        # when the claim stands alone).
+        "fanout_group": fanout_group,
+        "review_id": review_id,
         "handoff_note": "",
         "released_by": "",
         "stalled_by": "",
         "stall_reason": "",
+        # v2.6: who filed the completion receipt ("" until done) —
+        # the push-range rules attribute a done claim to its filer,
+        # not its owner, so a human filing on an agent's behalf can
+        # push the claim + receipt together (same shape as
+        # released_by/stalled_by).
+        "done_by": "",
     }
     tc.save_json(path, record)
     tc.append_event(team_dir, "claim_created", 1, args.owner,
                     base_commit=tc.git_head_commit(), task_id=args.task)
     rebuild(team_dir)
+    if fanout_group:
+        err = append_fanout_member(team_dir, fanout_group, args.task,
+                                   args.owner, branch, worktree)
+        if err:
+            print("CLAIM: warning — claim created, but the fan-out group "
+                  "record could not be updated: " + err)
     wt_note = f" — worktree {worktree} [{branch}]" if worktree else ""
     print(f"CLAIM: OK — {args.task} claimed by {args.owner} for {hours}h — files: {', '.join(files) or '(none — ' + scope['type'] + ' scope)'}{wt_note}")
     print(f"Commit trailer to use on every commit touching these files: [claim #{seq}]")
@@ -861,6 +1067,149 @@ def cmd_set_status(args, status, event):
     return 0
 
 
+def cmd_done(args):
+    """Finish a claim by filing a typed completion receipt (v2.6).
+
+    No silent done: --outcome and --summary are required, and
+    --by must be the claim owner (or a human roster member filing
+    on their behalf). The receipt is one file per task,
+    team/receipts/<task-id>.json; its claim_seq must equal the
+    live claim's (a stale retry cannot complete the wrong
+    attempt). A failed outcome still marks the claim done — the
+    attempt is over — but the PRD item stays in_progress and the
+    feature stays experimental (see prd.py / features.py).
+
+    Signing (v2.4 pattern, v2.5 mailbox scheme): when
+    require_signatures is on and done_by is a human, --key is
+    required and the receipt must carry a valid signature from
+    the filer's roster key (payload theroster-receipt-v1, namespace
+    theroster-receipt), verified BEFORE anything is written. A
+    present-but-invalid sig FAILS for any filer, human or agent.
+    An agent filing with --key signs too (its roster key must be
+    on file); an agent filing without --key needs none — the
+    commit signature binds it."""
+    claims_dir = args.claims_dir
+    team_dir = tc.team_dir_of(claims_dir)
+    path = claim_path(claims_dir, args.task)
+    rec, err = tc.load_json_file(path)
+    if err or not isinstance(rec, dict):
+        print(f"CLAIM: FAIL — no claim with task id {args.task}")
+        return 1
+    if rec.get("status") != "active":
+        print(f"CLAIM: FAIL — claim {args.task} is {rec.get('status')}, not active — "
+              "only an active claim can be completed")
+        return 1
+    if not args.by:
+        print("CLAIM: FAIL — --by is required (who completed this work)")
+        return 1
+    if not args.outcome:
+        print("CLAIM: FAIL — --outcome is required (succeeded|failed) — no silent done")
+        return 1
+    if args.outcome not in ("succeeded", "failed"):
+        print(f"CLAIM: FAIL — --outcome must be succeeded or failed (got {args.outcome!r})")
+        return 1
+    if not args.summary or not args.summary.strip():
+        print("CLAIM: FAIL — --summary is required (one honest sentence: what actually happened)")
+        return 1
+    files = list(args.files_modified or [])
+    for f in files:
+        perr = tc.path_syntax_error(f)
+        if perr:
+            print(f"CLAIM: FAIL — --files-modified {f!r}: {perr}")
+            return 1
+    owner = rec.get("owner_id", "")
+    roster = load_roster_names(team_dir)
+    filer_rec = roster.get(args.by)
+    is_human = bool(filer_rec and filer_rec.get("type") == "human")
+    if args.by != owner and not is_human:
+        print(f"CLAIM: FAIL — {args.by} is not the claim owner ({owner}) and not a human roster member — "
+              "only the owner, or a human filing on their behalf, may complete a claim")
+        return 1
+    cfg = tc.load_config(team_dir)
+    done_at = tc.now_iso()
+    claim_seq = rec.get("claim_seq")
+    sig = ""
+    if args.key:
+        if not os.path.isfile(args.key):
+            print(f"CLAIM: FAIL — --key file not found: {args.key}")
+            return 1
+        filer_key = (filer_rec or {}).get("public_key", "")
+        if not filer_key:
+            print(f"CLAIM: FAIL — {args.by} has no public_key on the roster — "
+                  "a signed receipt needs a roster key to verify against")
+            return 1
+        payload = tc.receipt_sign_payload(args.by, done_at, args.task,
+                                          claim_seq, args.outcome, args.summary)
+        # ssh_sign returns (sig, error) — unpack it; a bare tuple is
+        # always truthy, so `if not sig` on the tuple would never
+        # catch a signing failure, and storing the tuple would write
+        # a JSON list instead of the signature text.
+        sig, serr = tc.ssh_sign(args.key, tc.RECEIPT_SIG_NAMESPACE, payload)
+        if not sig:
+            print("CLAIM: FAIL — ssh-keygen -Y sign failed (%s)"
+                  % (serr or "check the key and its passphrase"))
+            return 1
+        # verify_receipt_signature returns (ok, error) too — unpack
+        # it; and the argument order is (key, done_by, done_at,
+        # task_id, claim_seq, outcome, summary, sig), sig LAST.
+        ok, verr = tc.verify_receipt_signature(
+            filer_key, args.by, done_at, args.task, claim_seq,
+            args.outcome, args.summary, sig)
+        if not ok:
+            print("CLAIM: FAIL — receipt signature does not verify against "
+                  f"{args.by}'s roster key ({verr or 'wrong key?'}) — the receipt is refused, nothing was written")
+            return 1
+    elif cfg.get("require_signatures") and is_human:
+        print(f"CLAIM: FAIL — require_signatures is on and {args.by} is a human — "
+              "a human filer must sign the receipt (--key ~/.ssh/id_ed25519)")
+        return 1
+    receipts_dir = os.path.join(team_dir, "receipts")
+    os.makedirs(receipts_dir, exist_ok=True)
+    rpath = os.path.join(receipts_dir, args.task + ".json")
+    old_receipt, _rerr = tc.load_json_file(rpath)
+    receipt = {
+        "task_id": args.task,
+        "claim_seq": claim_seq,
+        "outcome": args.outcome,
+        "summary": args.summary,
+        "files_modified": files,
+        "follow_ups": list(args.follow_ups or []),
+        "done_by": args.by,
+        "done_at": done_at,
+        "sig": sig,
+        "lamport": (int(old_receipt.get("lamport") or 0) + 1
+                    if isinstance(old_receipt, dict) else 1),
+    }
+    tc.save_json(rpath, receipt)
+    tc.append_event(team_dir, "receipt_filed", receipt["lamport"], args.by,
+                    base_commit=tc.git_head_commit(), task_id=args.task,
+                    extra={"outcome": args.outcome,
+                           "claim_seq": claim_seq if claim_seq is not None else ""})
+
+    def upd(c):
+        c["status"] = "done"
+        # v2.6: the filer attests to the done claim (push-range
+        # attribution mirrors released_by/stalled_by — see above).
+        c["done_by"] = args.by
+    rec, err = mutate(claims_dir, args.task, args.by, "claim_done", upd)
+    if err:
+        print("CLAIM: FAIL — receipt filed, but the claim could not be marked done: " + err)
+        return 1
+    if args.outcome == "failed":
+        _extra = ""
+        if rec.get("prd_item"):
+            _extra += f" the PRD item {rec['prd_item']} stays in_progress"
+        if rec.get("reserves_feature"):
+            _extra += f" and the feature {rec['reserves_feature']} stays experimental"
+        _suffix = (";" + _extra) if _extra else ""
+        print(f"CLAIM: {args.task} -> done (FAILED — the attempt is over{_suffix}). Receipt filed.")
+    else:
+        print(f"CLAIM: {args.task} -> done. Receipt filed "
+              f"(outcome: succeeded, files: {', '.join(files) or 'none listed'}). "
+              "Commit + push the claim file AND the receipt file.")
+    return 0
+
+
 def cmd_handoff(args):
     claims_dir = args.claims_dir
     team_dir = tc.team_dir_of(claims_dir)
@@ -938,6 +1287,12 @@ def main():
                          "branch defaults to wt/<task-id>")
     sp.add_argument("--hours", type=float, default=None)
     sp.add_argument("--expected-duration", default="")
+    sp.add_argument("--fanout-group", default="",
+                    help="v2.6: join a fan-out group — the group must exist, be open, "
+                         "and have room; the member is listed in the group record")
+    sp.add_argument("--review", default="",
+                    help="v2.6: follow up a request-changes review — only a review "
+                         "with verdict request-changes takes a follow-up claim")
     sp.add_argument("--claims-dir", default="team/claims")
     sp.add_argument("--config", default="")
     sp.add_argument("--roster", default="")
@@ -963,7 +1318,18 @@ def main():
     sp.add_argument("--claims-dir", default="team/claims")
     sp = sub.add_parser("done")
     sp.add_argument("--task", required=True)
-    sp.add_argument("--by", default="")
+    sp.add_argument("--by", required=True,
+                    help="who completed this work — the claim owner, or a human roster member filing on their behalf")
+    sp.add_argument("--outcome", required=True, choices=("succeeded", "failed"),
+                    help="v2.6: no silent done — the receipt must say what actually happened")
+    sp.add_argument("--summary", required=True,
+                    help="v2.6: one honest sentence — what actually happened")
+    sp.add_argument("--files-modified", nargs="*", default=[],
+                    help="v2.6: exact file paths changed (syntactically validated, not restricted to claim files — work creates new files)")
+    sp.add_argument("--follow-ups", nargs="*", default=[],
+                    help="v2.6: task ids of follow-up work this completion leaves behind")
+    sp.add_argument("--key", default="",
+                    help="v2.6: path to the filer's SSH private key — required for a human filer when require_signatures is on; signs the receipt")
     sp.add_argument("--claims-dir", default="team/claims")
     sp = sub.add_parser("handoff")
     sp.add_argument("--task", required=True)
@@ -989,7 +1355,7 @@ def main():
     if args.cmd == "release":
         return cmd_set_status(args, "released", "claim_released")
     if args.cmd == "done":
-        return cmd_set_status(args, "done", "claim_done")
+        return cmd_done(args)
     if args.cmd == "handoff":
         return cmd_handoff(args)
     return 1
