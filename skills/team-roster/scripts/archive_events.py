@@ -29,6 +29,9 @@ import os
 import sys
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import team_common as tc
+
 ARCHIVE_DIRNAME = "events-archive"
 WARN_BYTES = 1_000_000
 
@@ -96,8 +99,10 @@ def main():
     for (y, m) in sorted(move):
         os.makedirs(archive_dir, exist_ok=True)
         dest = os.path.join(archive_dir, f"{y:04d}-{m:02d}.jsonl")
-        with open(dest, "a", encoding="utf-8") as f:
-            f.write("\n".join(move[(y, m)]) + "\n")
+        # Newline-safe append (v2.6): a hand-edited archive file
+        # without a trailing newline would otherwise fuse with the
+        # first moved line.
+        tc.append_text_lines(dest, move[(y, m)])
         print(f"archive: moved {len(move[(y, m)])} event(s) to "
               f"events-archive/{y:04d}-{m:02d}.jsonl")
 

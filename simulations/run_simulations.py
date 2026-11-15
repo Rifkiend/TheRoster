@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simulasi bervariasi TheRoster — 10 skenario, pakai script ASLI skill (bukan mock).
+"""Simulasi bervariasi TheRoster — 11 skenario, pakai script ASLI skill (bukan mock).
 
 Setiap skenario jalan di salinan segar starter-repo, merekam perintah persis,
 exit code, dan output asli tiap langkah. Hasil: transcripts.json (+ README.md).
@@ -1764,14 +1764,683 @@ def s10():
     return scn
 
 
+def s11():
+    """v2.6.0 regression: Orca features — fan-out, decision gates,
+    typed completion receipts, formal reviews. Same git-backed
+    harness as s9/s10 (keys, require_signatures on, signed
+    commits), plus worktree_mode per-claim (the fan-out members
+    share one file in three worktrees). Two fixes found while
+    writing this scenario are covered here too: a done claim is
+    attributed to its filer (done_by), so a human filing a receipt
+    on an agent's behalf can push the claim + receipt together;
+    and released_by values fanout:<winner> / fanout-cancel:<by>
+    are composite actors, skipped by the signature check like
+    flags:/cancel:."""
+    import shlex
+    base = WORK / "s11-orca-features"
+    if base.exists():
+        shutil.rmtree(base)
+    base.mkdir(parents=True)
+    keydir = WORK / "s11-keys"
+    if keydir.exists():
+        shutil.rmtree(keydir)
+    keydir.mkdir(parents=True)
+    keys = {}
+    for member in ("owner", "assistant", "teammate-1", "assistant-2"):
+        kp = keydir / member
+        rc, out = sh(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(kp)], base)
+        assert rc == 0, out
+        keys[member] = (kp, (keydir / (member + ".pub")).read_text().strip())
+    git(["init", "--bare", "-b", "main", "remote.git"], base)
+    git(["clone", "-q", "remote.git", "work-main"], base)
+    main = base / "work-main"
+    git(["config", "user.email", "sim@theroster.test"], main)
+    git(["config", "user.name", "Sim"], main)
+    git(["config", "gpg.format", "ssh"], main)
+    shutil.copytree(STARTER, main, dirs_exist_ok=True)
+    cfg_path = main / "team" / "config.json"
+    cfg = json.loads(cfg_path.read_text())
+    cfg["require_signatures"] = True
+    cfg["worktree_mode"] = "per-claim"
+    cfg_path.write_text(json.dumps(cfg, indent=2, sort_keys=True))
+    for member, (_kp, pub) in keys.items():
+        if member == "assistant-2":
+            continue
+        rp = main / "team" / "roster" / (member + ".json")
+        rec = json.loads(rp.read_text())
+        rec["public_key"] = pub
+        rp.write_text(json.dumps(rec, indent=2, sort_keys=True))
+    # A second ai-agent: the receipts §C negative (a non-owner agent
+    # filing a receipt) needs an agent who is neither the owner nor
+    # a human — the starter roster has only one ai-agent.
+    import copy
+    a2 = json.loads((main / "team" / "roster" / "assistant.json").read_text())
+    a2 = copy.deepcopy(a2)
+    a2.update({"id": "assistant-2", "name": "Assistant 2",
+               "role": "ai-agent — second worker, for the receipt negative test",
+               "public_key": keys["assistant-2"][1]})
+    (main / "team" / "roster" / "assistant-2.json").write_text(
+        json.dumps(a2, indent=2, sort_keys=True))
+    rc, out = sh(["bash", "-c",
+                  ": > team/mailbox/assistant.jsonl && python3 %s sign --from owner --to assistant --message %s --key %s --team team"
+                  % (str(SCRIPTS / "mailbox.py"),
+                     shlex.quote("Tolong cek harga hari ini, lapor kalau berubah."),
+                     shlex.quote(str(keys["owner"][0])))], main)
+    assert rc == 0, out
+    git(["add", "-A"], main)
+    git(["-c", "user.signingkey=%s" % keys["owner"][0], "commit", "-q", "-S", "-m",
+         "starter + require_signatures + worktree_mode + assistant-2"], main)
+    git(["push", "-q", "origin", "main"], main)
+    scn = {"id": "s11", "title": "Orca features: fan-out, decision gates, receipts, reviews (v2.6.0)",
+           "team": "Tim bangun website (3 AI + owner)",
+           "story": "Orca menyelesaikan tabrakan dengan fisika (satu "
+                    "worktree per tugas, satu prompt difan-out ke lima "
+                    "agent, bandingkan diff, merge yang terbaik) dan "
+                    "TheRoster dengan disiplin (roster + klaim + registry "
+                    "+ hook). v2.6.0 menyalin pola Orca sebagai record "
+                    "file: satu prompt ke tiga agent, gate keputusan yang "
+                    "memblokir sampai pihak yang berhak menutupnya, "
+                    "receipt penyelesaian bertipe (tanpa silent done), "
+                    "dan review formal yang memblokir PRD done.",
+           "tanpa_roster": "Lima agent mengerjakan prompt yang sama tanpa "
+                           "ada yang mencatat siapa menang dan siapa dilepas; "
+                           "pekerjaan lanjut tanpa ada yang menyetujui; "
+                           "klaim ditandai selesai tanpa jejak apa yang "
+                           "terjadi; review hanya omongan tanpa record.",
+           "steps": []}
+    claim = ["python3", str(SCRIPTS / "claim.py"), "claim",
+             "--claims-dir", "team/claims", "--roster", "team/roster",
+             "--config", "team/config.json"]
+    check = ["python3", str(SCRIPTS / "claim.py"), "check",
+             "team/claims", "--roster", "team/roster"]
+    validate = ["python3", str(SCRIPTS / "validate.py"), "team"]
+    doctor = ["python3", str(SCRIPTS / "doctor.py"), "--ci",
+              "--skill-dir", str(SKILL)]
+    fanout = ["python3", str(SCRIPTS / "fanout.py")]
+    gates = ["python3", str(SCRIPTS / "gates.py")]
+    receipts = ["python3", str(SCRIPTS / "receipts.py")]
+    reviews = ["python3", str(SCRIPTS / "reviews.py")]
+    prd = ["python3", str(SCRIPTS / "prd.py")]
+
+    def claim_seq(task_id):
+        return json.loads((main / "team" / "claims" / (task_id + ".json")).read_text())["claim_seq"]
+
+    def commit_step(label, task_id, key_member, expect="pass", note=""):
+        """git add + git commit for one claim file, signed by the
+        named member's test key (key_member=None = unsigned)."""
+        seq = claim_seq(task_id)
+        msg = "claim: %s [claim #%d]" % (task_id, seq)
+        sign = ""
+        if key_member:
+            sign = "-c user.signingkey=%s commit -q -S " % shlex.quote(str(keys[key_member][0]))
+        else:
+            sign = "commit -q "
+        cmd = "git add team/claims/%s.json team/events.jsonl && git %s-m %s" % (task_id, sign, shlex.quote(msg))
+        return step(scn, label, ["bash", "-c", cmd], main, expect, note)
+
+    def push_step(label, expect="pass", note=""):
+        return step(scn, label, ["git", "push", "-q", "origin", "main"], main, expect, note)
+
+    def signed_commit(label, files, message, key_member, expect="pass", note=""):
+        """Commit arbitrary working-tree files (+ events.jsonl),
+        signed by key_member."""
+        cmd = "git add %s team/events.jsonl && git -c user.signingkey=%s commit -q -S -m %s" % (
+            " ".join(files), shlex.quote(str(keys[key_member][0])), shlex.quote(message))
+        return step(scn, label, ["bash", "-c", cmd], main, expect, note)
+
+    def commit_fanout_member(label, task_id, group_id, member_key):
+        """A fanout.py add touches two records with two actors (the
+        member's claim + the owner's group file), so it lands as two
+        commits: the claim signed by the member, the group signed by
+        the group creator (owner)."""
+        commit_step(label + " — commit klaim (ditandatangani member)",
+                    task_id, member_key)
+        signed_commit(label + " — commit grup (ditandatangani owner)",
+                      ["team/fanout/%s.json" % group_id],
+                      "fanout: %s member %s" % (group_id, task_id), "owner")
+
+    def expect_fail_with(label, argv, needle, note=""):
+        """Run argv; the step only passes when the command FAILS and
+        the failure names the expected gate — a failure for the wrong
+        reason is a failed gate, not a passed test."""
+        return step(scn, label, ["python3", "-c",
+            "import subprocess\n"
+            "p = subprocess.run(%r, capture_output=True, text=True)\n"
+            "print(p.stdout + p.stderr)\n"
+            "assert p.returncode != 0, 'expected failure, got exit 0'\n"
+            "assert %r in p.stdout + p.stderr, 'failure is not the expected one'\n"
+            "print('ASSERT OK: failed as expected')" % (argv, needle)],
+            main, "pass", note)
+
+    def expect_pass_with(label, argv, needle, note=""):
+        """Run argv; the step only passes when the command SUCCEEDS
+        and the expected warning/text is in the output."""
+        return step(scn, label, ["python3", "-c",
+            "import subprocess\n"
+            "p = subprocess.run(%r, capture_output=True, text=True)\n"
+            "print(p.stdout + p.stderr)\n"
+            "assert p.returncode == 0, 'expected pass, got exit ' + str(p.returncode)\n"
+            "assert %r in p.stdout + p.stderr, 'expected warning/text not found'\n"
+            "print('ASSERT OK: passed with the expected warning/text')" % (argv, needle)],
+            main, "pass", note)
+
+    # --- A. Fan-out lifecycle: one prompt, three worktrees, one winner ---
+    expect_fail_with("[main] A1: fanout create --max-members 1 DITOLAK — satu member bukan fan-out",
+                     fanout + ["create", "--id", "t-100", "--title", "x", "--prompt", "x",
+                               "--by", "owner", "--max-members", "1"],
+                     "--max-members must be 2–8",
+                     "N 2–8, default 5 — Orca pakai lima; satu member bukan fan-out, lebih dari delapan adalah kebakaran token.")
+    step(scn, "[main] A2: fanout create t-101 (max 3) oleh owner",
+         fanout + ["create", "--id", "t-101", "--title", "Fix the checkout race",
+                   "--prompt", "Fix the race in src/checkout.py; keep the public API.",
+                   "--by", "owner", "--max-members", "3"],
+         main, "pass",
+         "Grup tercatat di team/fanout/t-101.json, status open.")
+    signed_commit("[main] A3: commit grup t-101 (ditandatangani owner)",
+                  ["team/fanout/t-101.json"], "fanout: create t-101", "owner")
+    step(scn, "[main] A4: fanout add t-101-a (assistant, src/checkout.py, worktree ../wt-101-a)",
+         fanout + ["add", "--id", "t-101", "--task", "t-101-a", "--title", "Fix race (approach A)",
+                   "--owner", "assistant", "--files", "src/checkout.py",
+                   "--branch", "wt/t-101-a", "--worktree", "../wt-101-a"],
+         main, "pass",
+         "Member adalah klaim biasa (claim.py claim --fanout-group) + entri di grup — satu code path.")
+    commit_fanout_member("[main] A5: commit member t-101-a", "t-101-a", "t-101", "assistant")
+    expect_fail_with("[main] A6: fanout add t-101-d TANPA worktree DITOLAK — sibling di checkout bersama tabrakan",
+                     fanout + ["add", "--id", "t-101", "--task", "t-101-d", "--title", "Fix race (no worktree)",
+                               "--owner", "teammate-1", "--files", "src/checkout.py"],
+                     "someone else is already working on this",
+                     "Aturan v2.3 tidak memberi pengecualian untuk fan-out: member di file yang sama WAJIB worktree.")
+    step(scn, "[main] A7: fanout add t-101-b (teammate-1, worktree ../wt-101-b)",
+         fanout + ["add", "--id", "t-101", "--task", "t-101-b", "--title", "Fix race (approach B)",
+                   "--owner", "teammate-1", "--files", "src/checkout.py",
+                   "--branch", "wt/t-101-b", "--worktree", "../wt-101-b"],
+         main, "pass")
+    commit_fanout_member("[main] A8: commit member t-101-b", "t-101-b", "t-101", "teammate-1")
+    step(scn, "[main] A9: fanout add t-101-c (owner, worktree ../wt-101-c)",
+         fanout + ["add", "--id", "t-101", "--task", "t-101-c", "--title", "Fix race (approach C)",
+                   "--owner", "owner", "--files", "src/checkout.py",
+                   "--branch", "wt/t-101-c", "--worktree", "../wt-101-c"],
+         main, "pass")
+    commit_fanout_member("[main] A10: commit member t-101-c", "t-101-c", "t-101", "owner")
+    expect_fail_with("[main] A11: fanout add ke-4 DITOLAK — grup sudah penuh (max 3)",
+                     fanout + ["add", "--id", "t-101", "--task", "t-101-d", "--title", "Fix race (approach D)",
+                               "--owner", "assistant-2", "--files", "src/checkout.py",
+                               "--branch", "wt/t-101-d", "--worktree", "../wt-101-d"],
+                     "already has 3 member(s)",
+                     "Batas N ditegakkan di claim time, bukan cuma di check.")
+    step(scn, "[main] A12: fanout compare — scorecard, belum ada receipt",
+         fanout + ["compare", "--id", "t-101"], main, "pass",
+         "Compare melaporkan status live + receipt (belum ada) + diffstat; ia tidak menilai siapa menang.")
+    expect_fail_with("[main] A13: fanout decide pemenang BUKAN member DITOLAK",
+                     fanout + ["decide", "--id", "t-101", "--winner", "t-999", "--by", "owner",
+                               "--reason", "test"],
+                     "is not a member",
+                     "Pemenang harus salah satu member grup.")
+    expect_fail_with("[main] A14: fanout decide selagi member masih AKTIF DITOLAK",
+                     fanout + ["decide", "--id", "t-101", "--winner", "t-101-a", "--by", "owner",
+                               "--reason", "test"],
+                     "still ACTIVE without a receipt",
+                     "Keputusan hanya saat semua member sudah selesai (done + receipt) atau dilepas.")
+    for tid, member, approach in (("t-101-a", "assistant", "A"),
+                                  ("t-101-b", "teammate-1", "B"),
+                                  ("t-101-c", "owner", "C")):
+        base_commit = json.loads((main / "team" / "claims" / (tid + ".json")).read_text())["base_commit"]
+        step(scn, "[main] A15%s: worktree_setup.sh membuat worktree %s" % (approach, tid),
+             ["bash", str(SCRIPTS / "worktree_setup.sh"),
+              "../wt-101-%s" % approach.lower(), "wt/%s" % tid, base_commit],
+             main, "pass")
+        wt = base / ("wt-101-%s" % approach.lower())
+        file_action(scn, "[wt-101-%s] %s menulis src/checkout.py versi %s" % (approach.lower(), member, approach),
+                    "src/checkout.py",
+                    "# checkout.py — approach %s by %s\n\ndef checkout(cart):\n    # approach %s: %s\n    return {'ok': True, 'approach': '%s'}\n"
+                    % (approach, member, approach,
+                       {"A": "lock per cart id", "B": "retry with backoff", "C": "serialize via queue"}[approach],
+                       approach),
+                    wt)
+        seq = claim_seq(tid)
+        step(scn, "[wt-101-%s] %s commit kerja (trailer [claim #%d], ditandatangani %s)"
+             % (approach.lower(), member, seq, member),
+             ["bash", "-c", "git add src/checkout.py && git -c user.signingkey=%s commit -q -S -m %s"
+              % (shlex.quote(str(keys[member][0])),
+                 shlex.quote("t-%s: fix race (approach %s) [claim #%d]" % (tid, approach, seq)))],
+             wt, "pass",
+             "Kerja tiap member terjadi di worktree-nya sendiri, di branch-nya sendiri.")
+    step(scn, "[main] A16: fanout compare — diffstat tiap member vs base_commit",
+         fanout + ["compare", "--id", "t-101"], main, "pass",
+         "Tiga branch, tiga diff — scorecard membandingkan, manusia yang memutuskan.")
+    step(scn, "[main] A17: claim.py done t-101-a (assistant, succeeded)",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-101-a", "--by", "assistant",
+          "--outcome", "succeeded", "--summary", "Race fixed with a per-cart lock; test covers the timeout.",
+          "--files-modified", "src/checkout.py"],
+         main, "pass",
+         "Receipt pertama: outcome + summary wajib, tanpa silent done.")
+    signed_commit("[main] A18: commit receipt + klaim t-101-a (ditandatangani assistant)",
+                  ["team/claims/t-101-a.json", "team/receipts/t-101-a.json"],
+                  "done t-101-a", "assistant")
+    step(scn, "[main] A19: claim.py done t-101-b (teammate-1, failed — human, pakai --key)",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-101-b", "--by", "teammate-1",
+          "--outcome", "failed", "--summary", "Approach dead-ends on the timeout; retry amplifies it.",
+          "--files-modified", "src/checkout.py", "--key", str(keys["teammate-1"][0])],
+         main, "pass",
+         "Human filer dengan require_signatures on WAJIB --key; receipt ditandatangani sebelum ditulis.")
+    signed_commit("[main] A20: commit receipt + klaim t-101-b (ditandatangani teammate-1)",
+                  ["team/claims/t-101-b.json", "team/receipts/t-101-b.json"],
+                  "done t-101-b", "teammate-1")
+    step(scn, "[main] A21: claim.py done t-101-c (owner, succeeded — human, pakai --key)",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-101-c", "--by", "owner",
+          "--outcome", "succeeded", "--summary", "Race fixed via a queue; slower but correct.",
+          "--files-modified", "src/checkout.py", "--key", str(keys["owner"][0])],
+         main, "pass")
+    signed_commit("[main] A22: commit receipt + klaim t-101-c (ditandatangani owner)",
+                  ["team/claims/t-101-c.json", "team/receipts/t-101-c.json"],
+                  "done t-101-c", "owner")
+    step(scn, "[main] A23: fanout compare — scorecard lengkap (outcome + summary tiap member)",
+         fanout + ["compare", "--id", "t-101"], main, "pass")
+    expect_fail_with("[main] A24: fanout decide pemenang FAILED DITOLAK",
+                     fanout + ["decide", "--id", "t-101", "--winner", "t-101-b", "--by", "owner",
+                               "--reason", "test"],
+                     "receipt says failed",
+                     "Upaya yang gagal tidak bisa menang, betapapun rapi diff-nya.")
+    expect_fail_with("[main] A25: fanout decide oleh PEMILIK pemenang DITOLAK",
+                     fanout + ["decide", "--id", "t-101", "--winner", "t-101-a", "--by", "assistant",
+                               "--reason", "test"],
+                     "owns the winning claim",
+                     "Nobody picks their own work as the winner.")
+    step(scn, "[main] A26: fanout decide — pemenang t-101-a, oleh owner",
+         fanout + ["decide", "--id", "t-101", "--winner", "t-101-a", "--by", "owner",
+                   "--reason", "Cleanest diff; the test covers the timeout."],
+         main, "pass",
+         "Keputusan + pelepasan pecundang mendarat dalam satu panggilan.")
+    step(scn, "[main] A27: pecundang t-101-b dan t-101-c dilepas (released_by fanout:t-101-a)",
+         ["python3", "-c",
+          "import json\n"
+          "for t in ('t-101-b', 't-101-c'):\n"
+          "    c = json.load(open('team/claims/%s.json' % t))\n"
+          "    assert c['status'] == 'released' and c['released_by'] == 'fanout:t-101-a', c\n"
+          "print('ASSERT OK: losers released by fanout:t-101-a')"],
+         main, "pass",
+         "Sama bentuknya dengan pembatalan fitur — jejak audit utuh, bukan hapus.")
+    signed_commit("[main] A28: commit keputusan (grup + klaim pecundang, ditandatangani owner)",
+                  ["team/fanout/t-101.json", "team/claims/t-101-b.json", "team/claims/t-101-c.json"],
+                  "fanout: t-101 decided, winner t-101-a", "owner",
+                  note="released_by fanout:t-101-a adalah composite actor — signature check melewatinya, dan commit tetap terikat ke owner lewat decided_by grup.")
+    push_step("[main] A29: push fan-out t-101")
+    step(scn, "[main] A30: fanout.py check LOLOS",
+         fanout + ["check", "team/fanout", "--roster", "team/roster"], main, "pass")
+    step(scn, "[main] A31: validate.py LOLOS — grup decided, pecundang dilepas, receipt cocok",
+         validate, main, "pass")
+    expect_fail_with("[main] A32: fanout add ke grup DECIDED DITOLAK — decided itu terminal",
+                     fanout + ["add", "--id", "t-101", "--task", "t-101-d", "--title", "Terlambat",
+                               "--owner", "assistant-2", "--files", "src/late.py"],
+                     "is decided, not open",
+                     "Grup yang sudah diputuskan tidak dibuka lagi; upaya baru = grup baru.")
+    step(scn, "[main] A33: fanout create t-102 (max 2) oleh owner",
+         fanout + ["create", "--id", "t-102", "--title", "Spike: cache layer",
+                   "--prompt", "Spike a cache layer for the price monitor.",
+                   "--by", "owner", "--max-members", "2"],
+         main, "pass")
+    signed_commit("[main] A34: commit grup t-102 (ditandatangani owner)",
+                  ["team/fanout/t-102.json"], "fanout: create t-102", "owner")
+    step(scn, "[main] A35: fanout add t-102-a (assistant, src/spike.py)",
+         fanout + ["add", "--id", "t-102", "--task", "t-102-a", "--title", "Spike cache (A)",
+                   "--owner", "assistant", "--files", "src/spike.py"],
+         main, "pass")
+    commit_fanout_member("[main] A36: commit member t-102-a", "t-102-a", "t-102", "assistant")
+    step(scn, "[main] A37: fanout cancel t-102 oleh owner",
+         fanout + ["cancel", "--id", "t-102", "--by", "owner", "--reason", "Race fixed another way."],
+         main, "pass")
+    step(scn, "[main] A38: member t-102-a dilepas (released_by fanout-cancel:owner)",
+         ["python3", "-c",
+          "import json\n"
+          "c = json.load(open('team/claims/t-102-a.json'))\n"
+          "assert c['status'] == 'released' and c['released_by'] == 'fanout-cancel:owner', c\n"
+          "print('ASSERT OK: member released by fanout-cancel:owner')"],
+         main, "pass")
+    signed_commit("[main] A39: commit pembatalan t-102 (ditandatangani owner)",
+                  ["team/fanout/t-102.json", "team/claims/t-102-a.json"],
+                  "fanout: t-102 cancelled", "owner")
+    push_step("[main] A40: push fan-out t-102")
+
+    # --- B. Decision gates: block, then resolve/waive ---
+    # Note the pushes: the one-owner rule applies to the whole push
+    # range (all unpushed commits), so — like s9/s10 — each actor's
+    # unit is pushed before the next actor's unit starts. A validate
+    # run against a mixed-actor range would (correctly) fail.
+    step(scn, "[main] B1: gates create g-201 (blokir PRD prd-001) oleh owner",
+         gates + ["create", "--id", "g-201", "--question", "Is the new checkout API approved?",
+                  "--blocks-kind", "prd", "--blocks-id", "prd-001", "--by", "owner"],
+         main, "pass")
+    signed_commit("[main] B2: commit gate g-201 (ditandatangani owner)",
+                  ["team/gates/g-201.json"], "gates: create g-201", "owner")
+    push_step("[main] B3: push gate g-201")
+    expect_fail_with("[main] B4: klaim t-201 --prd prd-001 DITOLAK — gate g-201 masih open",
+                     claim + ["--task", "t-201", "--title", "Kerjakan checkout",
+                              "--owner", "assistant", "--files", "src/gate.py", "--prd", "prd-001"],
+                     "decision gate g-201 is OPEN",
+                     "Gate menolak di claim time — sebelum ada pekerjaan yang terbuang.")
+    expect_fail_with("[main] B5: gates create untuk subject yang TIDAK ADA DITOLAK",
+                     gates + ["create", "--id", "g-299", "--question", "x?",
+                              "--blocks-kind", "prd", "--blocks-id", "prd-999", "--by", "owner"],
+                     "does not exist",
+                     "Gate PRD/fitur butuh subject yang ada — kecuali gate klaim, yang boleh dibuat sebelum klaimnya.")
+    expect_fail_with("[main] B6: gates resolve oleh PEMILIK subject DITOLAK",
+                     gates + ["resolve", "--id", "g-201", "--by", "owner", "--resolution", "yes"],
+                     "differ from the subject's owner",
+                     "Aturan yang sama dengan promote ke stable: nobody approves their own work.")
+    step(scn, "[main] B7: gates resolve g-201 oleh teammate-1 (bukan owner prd-001)",
+         gates + ["resolve", "--id", "g-201", "--by", "teammate-1", "--resolution", "yes"],
+         main, "pass")
+    signed_commit("[main] B8: commit resolve g-201 (ditandatangani teammate-1)",
+                  ["team/gates/g-201.json"], "gates: resolve g-201", "teammate-1")
+    push_step("[main] B9: push resolve g-201")
+    step(scn, "[main] B10: klaim t-201 --prd prd-001 LOLOS setelah gate resolved",
+         claim + ["--task", "t-201", "--title", "Kerjakan checkout",
+                  "--owner", "assistant", "--files", "src/gate.py", "--prd", "prd-001"],
+         main, "pass")
+    commit_step("[main] B11: commit klaim t-201 (ditandatangani assistant)", "t-201", "assistant")
+    push_step("[main] B12: push klaim t-201")
+    step(scn, "[main] B13: gates create g-202 (blokir klaim t-201 — mid-work gate) oleh owner",
+         gates + ["create", "--id", "g-202", "--question", "Is the timeout handling acceptable?",
+                  "--blocks-kind", "claim", "--blocks-id", "t-201", "--by", "owner"],
+         main, "pass",
+         "Gate yang dibuat setelah klaim ada menghentikan pekerja di check/push berikutnya, bukan di tengah ketikan.")
+    signed_commit("[main] B14: commit gate g-202 (ditandatangani owner)",
+                  ["team/gates/g-202.json"], "gates: create g-202", "owner")
+    push_step("[main] B15: push gate g-202")
+    expect_fail_with("[main] B16: claim.py check HARUS GAGAL — gate g-202 open pada klaim aktif",
+                     check, "decision gate g-202 is OPEN",
+                     "Bentuk yang sama dengan fitur yang dibatalkan: FAIL, bukan warning.")
+    expect_fail_with("[main] B17: validate.py HARUS GAGAL — gate g-202 open pada klaim aktif",
+                     validate, "decision gate g-202 is OPEN",
+                     "Dua gate membaca aturan yang sama (check per-script + validate cross-file).")
+    expect_fail_with("[main] B18: gates waive oleh AGENT DITOLAK — waive adalah perbuatan manusia",
+                     gates + ["waive", "--id", "g-202", "--by", "assistant", "--reason", "test"],
+                     "is not a human roster member",
+                     "Agent tidak boleh mengabaikan gate; hanya manusia yang boleh.")
+    step(scn, "[main] B19: gates waive g-202 oleh owner (human)",
+         gates + ["waive", "--id", "g-202", "--by", "owner", "--reason", "Decided offline; recorded here."],
+         main, "pass")
+    signed_commit("[main] B20: commit waive g-202 (ditandatangani owner)",
+                  ["team/gates/g-202.json"], "gates: waive g-202", "owner")
+    push_step("[main] B21: push waive g-202")
+    step(scn, "[main] B22: claim.py check LOLOS setelah gate di-waive",
+         check, main, "pass")
+    step(scn, "[main] B23: validate.py LOLOS setelah gate di-waive",
+         validate, main, "pass")
+    step(scn, "[main] B24: reviews create r-201 (approve, oleh teammate-1, pada klaim t-201)",
+         reviews + ["create", "--id", "r-201", "--task", "t-201", "--reviewer", "teammate-1",
+                    "--verdict", "approve", "--note", "Gate question answered by the code.",
+                    "--key", str(keys["teammate-1"][0])],
+         main, "pass",
+         "Review dibuat di §B karena resolve --review butuh review yang sudah ada. Reviewer human + require_signatures on → delivery line ditandatangani (--key).")
+    signed_commit("[main] B25: commit review r-201 + mailbox assistant (ditandatangani teammate-1)",
+                  ["team/reviews/r-201.json", "team/mailbox/assistant.jsonl"],
+                  "reviews: create r-201", "teammate-1")
+    push_step("[main] B26: push review r-201")
+    step(scn, "[main] B27: gates create g-203 (blokir klaim t-201) oleh owner",
+         gates + ["create", "--id", "g-203", "--question", "Is the API surface final?",
+                  "--blocks-kind", "claim", "--blocks-id", "t-201", "--by", "owner"],
+         main, "pass")
+    signed_commit("[main] B28: commit gate g-203 (ditandatangani owner)",
+                  ["team/gates/g-203.json"], "gates: create g-203", "owner")
+    push_step("[main] B29: push gate g-203")
+    step(scn, "[main] B30: gates resolve g-203 --review r-201 (approve) LOLOS",
+         gates + ["resolve", "--id", "g-203", "--by", "teammate-1", "--resolution", "yes",
+                  "--review", "r-201"],
+         main, "pass",
+         "Resolve yang mengutip review harus mengutip review approve pada subject yang sama.")
+    signed_commit("[main] B31: commit resolve g-203 (ditandatangani teammate-1)",
+                  ["team/gates/g-203.json"], "gates: resolve g-203", "teammate-1")
+    push_step("[main] B32: push resolve g-203")
+    step(scn, "[main] B33: reviews create r-202 (request-changes, oleh owner, pada klaim t-201)",
+         reviews + ["create", "--id", "r-202", "--task", "t-201", "--reviewer", "owner",
+                    "--verdict", "request-changes", "--note", "The timeout case is untested.",
+                    "--key", str(keys["owner"][0])],
+         main, "pass")
+    signed_commit("[main] B34: commit review r-202 + mailbox assistant (ditandatangani owner)",
+                  ["team/reviews/r-202.json", "team/mailbox/assistant.jsonl"],
+                  "reviews: create r-202", "owner")
+    push_step("[main] B35: push review r-202")
+    step(scn, "[main] B36: gates create g-204 (blokir klaim t-201) oleh owner",
+         gates + ["create", "--id", "g-204", "--question", "Is the error path covered?",
+                  "--blocks-kind", "claim", "--blocks-id", "t-201", "--by", "owner"],
+         main, "pass")
+    signed_commit("[main] B37: commit gate g-204 (ditandatangani owner)",
+                  ["team/gates/g-204.json"], "gates: create g-204", "owner")
+    push_step("[main] B38: push gate g-204")
+    expect_fail_with("[main] B39: gates resolve g-204 --review r-202 (request-changes) DITOLAK",
+                     gates + ["resolve", "--id", "g-204", "--by", "teammate-1", "--resolution", "yes",
+                              "--review", "r-202"],
+                     "only an approve review",
+                     "Review yang meminta perubahan tidak bisa memuaskan gate — perbaiki dulu, baru approve.")
+    step(scn, "[main] B40: gates waive g-204 oleh owner (human)",
+         gates + ["waive", "--id", "g-204", "--by", "owner", "--reason", "Superseded by the review follow-up."],
+         main, "pass")
+    signed_commit("[main] B41: commit waive g-204 (ditandatangani owner)",
+                  ["team/gates/g-204.json"], "gates: waive g-204", "owner")
+    push_step("[main] B42: push waive g-204")
+    step(scn, "[main] B43: validate.py LOLOS — semua gate resolved/waived",
+         validate, main, "pass")
+
+    # --- C. Receipts: valid vs forged ---
+    step(scn, "[main] C1: klaim t-301 (assistant, src/receipt.py)",
+         claim + ["--task", "t-301", "--title", "Tulis receipt test",
+                  "--owner", "assistant", "--files", "src/receipt.py"],
+         main, "pass")
+    commit_step("[main] C2: commit klaim t-301 (ditandatangani assistant)", "t-301", "assistant")
+    expect_fail_with("[main] C3: claim.py done TANPA --outcome DITOLAK — no silent done",
+                     ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-301",
+                      "--by", "assistant", "--summary", "Selesai."],
+                     "required: --outcome",
+                     "Argparse menolak sebelum ada file yang ditulis.")
+    expect_fail_with("[main] C4: claim.py done oleh assistant-2 (bukan owner, bukan human) DITOLAK",
+                     ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-301",
+                      "--by", "assistant-2", "--outcome", "succeeded", "--summary", "Bukan kerjaanku."],
+                     "is not the claim owner",
+                     "Hanya owner, atau human yang mengisi atas namanya, yang boleh menyelesaikan klaim.")
+    expect_fail_with("[main] C5: claim.py done oleh owner (human) TANPA --key DITOLAK",
+                     ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-301",
+                      "--by", "owner", "--outcome", "succeeded", "--summary", "Tanpa kunci."],
+                     "must sign the receipt",
+                     "Dengan require_signatures on, human filer WAJIB menandatangani receipt.")
+    step(scn, "[main] C6: claim.py done oleh owner (human, pakai --key) LOLOS — receipt bertanda tangan",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-301", "--by", "owner",
+          "--outcome", "succeeded", "--summary", "Filed on behalf of assistant.",
+          "--files-modified", "src/receipt.py", "--key", str(keys["owner"][0])],
+         main, "pass",
+         "Human mengisi atas nama agent — dan klaim mencatat done_by=owner, jadi commit-nya satu aktor.")
+    step(scn, "[main] C7: receipt t-301 bertanda tangan (sig string) + klaim done_by=owner",
+         ["python3", "-c",
+          "import json\n"
+          "r = json.load(open('team/receipts/t-301.json'))\n"
+          "assert isinstance(r.get('sig'), str) and r['sig'].startswith('-----BEGIN SSH SIGNATURE-----'), r.get('sig')\n"
+          "c = json.load(open('team/claims/t-301.json'))\n"
+          "assert c['status'] == 'done' and c.get('done_by') == 'owner', c\n"
+          "print('ASSERT OK: signed receipt (string sig) + claim done_by=owner')"],
+         main, "pass",
+         "Tanpa done_by pada klaim, push ini akan gagal one-owner rule (owner vs assistant).")
+    signed_commit("[main] C8: commit receipt + klaim t-301 (ditandatangani owner — filer)",
+                  ["team/claims/t-301.json", "team/receipts/t-301.json"],
+                  "done t-301", "owner")
+    push_step("[main] C8b: push receipt t-301")
+    step(scn, "[main] C9: klaim t-303 --prd prd-001 (assistant, src/failed.py)",
+         claim + ["--task", "t-303", "--title", "Coba pendekatan gagal",
+                  "--owner", "assistant", "--files", "src/failed.py", "--prd", "prd-001"],
+         main, "pass")
+    commit_step("[main] C10: commit klaim t-303 (ditandatangani assistant)", "t-303", "assistant")
+    step(scn, "[main] C11: claim.py done t-303 --outcome failed (assistant)",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-303", "--by", "assistant",
+          "--outcome", "failed", "--summary", "Approach does not scale; abandoning it.",
+          "--files-modified", "src/failed.py"],
+         main, "pass",
+         "Failed tetap menandai klaim done — upayanya selesai — tapi PRD tetap in_progress.")
+    step(scn, "[main] C12: klaim t-303 done + receipt failed + PRD prd-001 MASIH in_progress",
+         ["python3", "-c",
+          "import json\n"
+          "c = json.load(open('team/claims/t-303.json'))\n"
+          "assert c['status'] == 'done', c\n"
+          "r = json.load(open('team/receipts/t-303.json'))\n"
+          "assert r['outcome'] == 'failed', r\n"
+          "p = json.load(open('team/prd/prd-001.json'))\n"
+          "assert p['status'] == 'in_progress', p\n"
+          "print('ASSERT OK: failed receipt filed, claim done, PRD still in_progress')"],
+         main, "pass")
+    signed_commit("[main] C13: commit receipt + klaim t-303 (ditandatangani assistant)",
+                  ["team/claims/t-303.json", "team/receipts/t-303.json"],
+                  "done t-303", "assistant")
+    push_step("[main] C13b: push receipt t-303")
+    step(scn, "[main] C14: klaim t-304 (assistant, src/forge.py)",
+         claim + ["--task", "t-304", "--title", "Kerja yang akan dipalsukan receipt-nya",
+                  "--owner", "assistant", "--files", "src/forge.py"],
+         main, "pass")
+    commit_step("[main] C15: commit klaim t-304 (ditandatangani assistant)", "t-304", "assistant")
+    step(scn, "[main] C16: claim.py done t-304 (assistant, succeeded)",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-304", "--by", "assistant",
+          "--outcome", "succeeded", "--summary", "Done cleanly.",
+          "--files-modified", "src/forge.py"],
+         main, "pass")
+    signed_commit("[main] C17: commit receipt + klaim t-304 (ditandatangani assistant)",
+                  ["team/claims/t-304.json", "team/receipts/t-304.json"],
+                  "done t-304", "assistant")
+    push_step("[main] C17b: push receipt t-304")
+    _orig_t304 = json.loads((main / "team" / "receipts" / "t-304.json").read_text())
+    _orig_t301 = json.loads((main / "team" / "receipts" / "t-301.json").read_text())
+    file_action(scn, "[main] C18: PALSUKAN receipt t-304 — claim_seq diganti 999 (aksi kerja)",
+                "team/receipts/t-304.json",
+                json.dumps({**_orig_t304, "claim_seq": 999}, indent=2, sort_keys=True) + "\n", main)
+    expect_fail_with("[main] C19: receipts.py check HARUS GAGAL — claim_seq receipt tidak cocok dengan klaim",
+                     receipts + ["check", "team/receipts", "--roster", "team/roster"],
+                     "does not match claim",
+                     "Retry basi tidak bisa menyelesaikan attempt yang salah — seq adalah pengikatnya.")
+    file_action(scn, "[main] C20: pulihkan receipt t-304 yang asli",
+                "team/receipts/t-304.json",
+                json.dumps(_orig_t304, indent=2, sort_keys=True) + "\n", main)
+    step(scn, "[main] C21: receipts.py check LOLOS lagi",
+         receipts + ["check", "team/receipts", "--roster", "team/roster"], main, "pass")
+    file_action(scn, "[main] C22: RUSAK receipt t-301 yang bertanda tangan — summary diganti (aksi kerja)",
+                "team/receipts/t-301.json",
+                json.dumps({**_orig_t301, "summary": "Filed on behalf of assistant. (EDITED)"},
+                           indent=2, sort_keys=True) + "\n", main)
+    expect_fail_with("[main] C23: receipts.py check HARUS GAGAL — summary diubah, sig tidak lagi cocok",
+                     receipts + ["check", "team/receipts", "--roster", "team/roster"],
+                     "invalid sig",
+                     "Tanda tangan mengikat summary: satu kata berubah, verifikasi gagal.")
+    file_action(scn, "[main] C24: pulihkan receipt t-301 yang asli",
+                "team/receipts/t-301.json",
+                json.dumps(_orig_t301, indent=2, sort_keys=True) + "\n", main)
+    step(scn, "[main] C25: receipts.py check LOLOS lagi",
+         receipts + ["check", "team/receipts", "--roster", "team/roster"], main, "pass")
+    step(scn, "[main] C26: validate.py LOLOS — semua receipt cocok dengan klaimnya",
+         validate, main, "pass")
+    push_step("[main] C27: push receipts §C")
+
+    # --- D. Reviews: approve vs request-changes, PRD done-gate ---
+    expect_fail_with("[main] D1: prd status prd-001 --to done DITOLAK — review terakhir r-202 request-changes",
+                     prd + ["status", "--id", "prd-001", "--to", "done", "--by", "owner",
+                            "--reason", "test"],
+                     "request-changes",
+                     "Review terakhir pada klaim terikat t-201 meminta perubahan — PRD belum done.")
+    step(scn, "[main] D2: reviews create r-203 (approve, oleh teammate-1, pada klaim t-201)",
+         reviews + ["create", "--id", "r-203", "--task", "t-201", "--reviewer", "teammate-1",
+                    "--verdict", "approve", "--note", "Timeout case now tested.",
+                    "--key", str(keys["teammate-1"][0])],
+         main, "pass",
+         "Approve yang lebih baru membersihkan request-changes (latest by created_at, id).")
+    signed_commit("[main] D3: commit review r-203 + mailbox assistant (ditandatangani teammate-1)",
+                  ["team/reviews/r-203.json", "team/mailbox/assistant.jsonl"],
+                  "reviews: create r-203", "teammate-1")
+    expect_fail_with("[main] D4: reviews create oleh PEMILIK subject DITOLAK — nobody reviews their own work",
+                     reviews + ["create", "--id", "r-204", "--task", "t-201", "--reviewer", "assistant",
+                                "--verdict", "approve", "--note", "Self review."],
+                     "owns the reviewed claim",
+                     "Aturan yang sama dengan promote ke stable dan resolve gate.")
+    expect_fail_with("[main] D5: reviews create pada task yang TIDAK ADA DITOLAK",
+                     reviews + ["create", "--id", "r-205", "--task", "t-999", "--reviewer", "owner",
+                                "--verdict", "approve", "--note", "Ghost."],
+                     "does not exist",
+                     "Target review harus ada.")
+    expect_fail_with("[main] D6: reviews create dengan anotasi baris 0 DITOLAK",
+                     reviews + ["create", "--id", "r-206", "--task", "t-201", "--reviewer", "owner",
+                                "--verdict", "approve", "--note", "Bad annotation.",
+                                "--annotations", "src/gate.py:0:Zero line",
+                                "--key", str(keys["owner"][0])],
+                     "must be a positive number",
+                     "Anotasi adalah file:line:note — baris harus positif, file harus valid, note tidak boleh kosong.")
+    step(scn, "[main] D7: mailbox assistant berisi delivery review (id + verdict, tanpa teks bebas)",
+         ["python3", "-c",
+          "import json\n"
+          "lines = [json.loads(l) for l in open('team/mailbox/assistant.jsonl') if l.strip()]\n"
+          "texts = [l.get('message', '') for l in lines]\n"
+          "assert any('Review r-203' in t and 'accepted' in t for t in texts), texts\n"
+          "assert not any('Timeout case' in t for t in texts), 'reviewer free text leaked into the mailbox'\n"
+          "print('ASSERT OK: delivery line carries id + verdict word only')"],
+         main, "pass",
+         "Kata verdict di mailbox adalah 'accepted', bukan 'approve' — pola imperatif tidak terpicu.")
+    step(scn, "[main] D8: validate.py LOLOS — delivery mailbox tidak memicu scan imperatif",
+         validate, main, "pass")
+    step(scn, "[main] D9: claim.py done t-201 (assistant, succeeded)",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-201", "--by", "assistant",
+          "--outcome", "succeeded", "--summary", "Checkout done; timeout case tested.",
+          "--files-modified", "src/gate.py"],
+         main, "pass",
+         "t-201 harus done DULU: klaim follow-up t-305 menyentuh file yang sama (src/gate.py), dan satu file tidak boleh diklaim dua kali selagi klaim pertama masih aktif — walau owner-nya sama.")
+    signed_commit("[main] D10: commit receipt + klaim t-201 (ditandatangani assistant)",
+                  ["team/claims/t-201.json", "team/receipts/t-201.json"],
+                  "done t-201", "assistant")
+    step(scn, "[main] D11: claim t-305 --review r-202 (follow-up request-changes) oleh assistant",
+         claim + ["--task", "t-305", "--title", "Address review r-202: test the timeout case",
+                  "--owner", "assistant", "--files", "src/gate.py", "--review", "r-202"],
+         main, "pass",
+         "Hanya review request-changes yang membuka klaim follow-up.")
+    commit_step("[main] D12: commit klaim t-305 (ditandatangani assistant)", "t-305", "assistant")
+    expect_fail_with("[main] D13: claim --review r-203 (approve) DITOLAK — approve tidak butuh follow-up",
+                     claim + ["--task", "t-306", "--title", "Follow-up approve (salah)",
+                              "--owner", "assistant", "--files", "src/gate.py", "--review", "r-203"],
+                     "only a request-changes review",
+                     "Follow-up hanya untuk pekerjaan yang diminta diubah.")
+    step(scn, "[main] D14: claim.py done t-305 (assistant, succeeded — follow-up selesai)",
+         ["python3", str(SCRIPTS / "claim.py"), "done", "--task", "t-305", "--by", "assistant",
+          "--outcome", "succeeded", "--summary", "Timeout case tested and passing.",
+          "--files-modified", "src/gate.py"],
+         main, "pass")
+    signed_commit("[main] D15: commit receipt + klaim t-305 (ditandatangani assistant)",
+                  ["team/claims/t-305.json", "team/receipts/t-305.json"],
+                  "done t-305", "assistant")
+    push_step("[main] D16: push unit assistant §D (one-owner rule: PRD-done oleh owner dipisah)")
+    step(scn, "[main] D17: prd status prd-001 --to done LOLOS — approve terbaru membersihkan r-202",
+         prd + ["status", "--id", "prd-001", "--to", "done", "--by", "owner",
+                "--reason", "Checkout done; reviews cleared."],
+         main, "pass",
+         "Fitur login-api stable, gate resolved, review terakhir approve, tidak ada klaim aktif pada item ini.")
+    signed_commit("[main] D18: commit PRD prd-001 done (ditandatangani owner)",
+                  ["team/prd/prd-001.json"], "prd: prd-001 done", "owner")
+    step(scn, "[main] D19: validate.py LOLOS — PRD done dengan review approve + fitur stable",
+         validate, main, "pass")
+    push_step("[main] D20: push reviews + PRD §D")
+
+    # --- E. Integration: validate + doctor end-to-end ---
+    step(scn, "[main] E1: validate.py LOLOS end-to-end — fan-out, gate, receipt, review semua terperiksa",
+         validate, main, "pass")
+    step(scn, "[main] E2: doctor.py --ci LOLOS — check 11 menjalankan keempat check Orca",
+         doctor, main, "pass",
+         "Doctor gagal kalau satu pun dari fanout/gates/receipts/reviews check gagal.")
+    step(scn, "[main] E3: keempat list menampilkan record baru",
+         ["bash", "-c", "python3 %s list team/fanout && python3 %s list team/gates && python3 %s list team/receipts && python3 %s list team/reviews"
+          % (str(SCRIPTS / "fanout.py"), str(SCRIPTS / "gates.py"),
+             str(SCRIPTS / "receipts.py"), str(SCRIPTS / "reviews.py"))],
+         main, "pass")
+    validate_end(scn, main)
+    return scn
+
+
 def main():
     WORK.mkdir(exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
-    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7(), s8(), s9(), s10()]
+    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7(), s8(), s9(), s10(), s11()]
     total_steps = sum(len(s["steps"]) for s in scenarios)
     gates_ok = sum(1 for s in scenarios for st in s["steps"] if st.get("gate_ok"))
     doc = {
-        "generated_by": "run_simulations.py — script ASLI TheRoster v2.5.0",
+        "generated_by": "run_simulations.py — script ASLI TheRoster v2.6.0",
         "repo": "Rifkiend/TheRoster",
         "scenarios": scenarios,
         "summary": {"scenarios": len(scenarios), "steps": total_steps,

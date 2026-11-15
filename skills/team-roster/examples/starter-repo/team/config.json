@@ -12,7 +12,7 @@
   "max_lifetime_hours": 24,
   "prd_required": false,
   "require_signatures": false,
-  "skill_version": "2.5.0",
+  "skill_version": "2.6.0",
   "strict_deps": false,
   "worktree_copy_files": [
     ".env",

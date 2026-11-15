@@ -281,12 +281,47 @@ def cmd_status(args):
     if args.to == "done":
         # The honesty gate: every referenced feature must exist.
         # Whether they are stable or cancelled is validate.py's job.
-        features_dir = os.path.join(tc.team_dir_of(args.prd_dir), "features")
+        team_dir = tc.team_dir_of(args.prd_dir)
+        features_dir = os.path.join(team_dir, "features")
         have = set(tc.load_records(features_dir))
         missing = [f for f in (data.get("features") or []) if f not in have]
         if missing:
             print(f"PRD: FAIL — cannot mark {args.id} done: feature(s) not registered yet: {', '.join(missing)}. "
                   "Register them first, or remove them from this item.")
+            return 1
+        # v2.6: an open decision gate on this item (directly, or
+        # via one of its features) blocks done — resolve or waive
+        # the gate first.
+        gates = {}
+        for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "gates")).items():
+            if isinstance(rec, dict):
+                gates[stem] = rec
+        gate = tc.open_gate_for_prd(args.id, gates, (data.get("features") or []))
+        if gate:
+            print(f"PRD: FAIL — cannot mark {args.id} done: decision gate {gate.get('id')} is OPEN "
+                  f"({gate.get('blocks_kind')} {gate.get('blocks_id')}): \"{gate.get('question')}\" — "
+                  "resolve or waive the gate first (gates.py)")
+            return 1
+        # v2.6: the latest review on this item (or its features, or
+        # claims bound to it) is request-changes — the work is not
+        # done until the reviewer's changes are addressed and a
+        # newer approve clears it.
+        reviews = {}
+        for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "reviews")).items():
+            if isinstance(rec, dict):
+                reviews[stem] = rec
+        claims = {}
+        for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "claims")).items():
+            if isinstance(rec, dict):
+                claims[stem] = rec
+        blocked = tc.prd_blocked_by_review(reviews, args.id,
+                                           (data.get("features") or []), claims)
+        if blocked:
+            review, label = blocked
+            print(f"PRD: FAIL — cannot mark {args.id} done: latest review {review.get('id')} on "
+                  f"{label} is request-changes (reviewer {review.get('reviewer')}): "
+                  f"\"{review.get('note')}\" — address it (claim.py claim --review <id>) "
+                  "and get a newer approve first")
             return 1
 
     def upd(rec):

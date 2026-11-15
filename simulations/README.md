@@ -1,11 +1,11 @@
-# Simulasi TheRoster — 10 skenario bervariasi
+# Simulasi TheRoster — 11 skenario bervariasi
 
-Simulasi ini menjalankan **script asli** skill TheRoster v2.5.0 (bukan mock)
+Simulasi ini menjalankan **script asli** skill TheRoster v2.6.0 (bukan mock)
 di salinan segar starter-repo, dan merekam perintah persis, exit code, dan
 output asli tiap langkah.
 
 Jalankan ulang: `python3 run_simulations.py`
-Hasil: `transcripts.json` (275 langkah, semua gate sesuai harapan pada run terakhir).
+Hasil: `transcripts.json` (424 langkah, semua gate sesuai harapan pada run terakhir).
 
 | ID | Skenario | Yang dibuktikan |
 |----|----------|-----------------|
@@ -19,6 +19,7 @@ Hasil: `transcripts.json` (275 langkah, semua gate sesuai harapan pada run terak
 | s8 | Worktree-gate fixes (v2.3.1) | Canonical worktree paths; deleted-worktree gate (branch-aware); dirty-worktree gate; branch-mismatch di claim check |
 | s9 | Signed identity + creation order + lifetime + mailbox trust (v2.4.0; mailbox §C per v2.5.0) | Commit team/ tanpa tanda tangan ditolak; tanda tangan kunci salah ditolak; created_seq memutuskan "duluan"; klaim mati di max_lifetime_hours walau heartbeat segar; mailbox: pesan manusia tanpa sig valid FAIL (pesan asli "STOP semua kerja hari ini..." tertangkap), pesan bertanda tangan lolos, sig kunci salah gagal |
 | s10 | Hardening: close every remaining hole (v2.5.0) | Deletion record team/ FAIL; trailer [claim #N] ditegakkan (tanpa trailer / nomor salah FAIL, merge commit dilewati); event malformed/dangling/actor asing FAIL; ghost claim tidak blocking + warning; siklus A↔B dan 3-cycle FAIL di check/validate/reverify + ditolak di register/improve; history rewrite terdeteksi sync_check + validate via last-known-main-SHA; heartbeat/started_at dari masa depan FAIL, expires_at 2 jam ke depan sah; klaim atas team/ ditolak; nama tampilan ganda FAIL |
+| s11 | Fitur Orca (v2.6.0): fan-out, gates, receipts, reviews | Fan-out: create max-1 FAIL, 3 member di worktree masing-masing, sibling tanpa worktree FAIL, member ke-4 FAIL, decide prematur / winner bukan member / winner failed / decider owner winner FAIL, decide benar melepas loser `fanout:<winner>`, cancel melepas `fanout-cancel:<by>`; Gates: klaim ditolak selagi gate open, resolve oleh owner subject FAIL, mid-work gate FAIL di check+validate, waive oleh agent FAIL, resolve --review approve LOLOS / request-changes FAIL; Receipts: done tanpa --outcome FAIL, done oleh agent lain FAIL, done human tanpa --key FAIL, receipt failed tetap menutup klaim tapi PRD in_progress, receipt palsu (claim_seq) FAIL, receipt bertanda tangan yang diubah FAIL "invalid sig"; Reviews: PRD done ditolak selagi review terakhir request-changes, approve terbaru membersihkan, review oleh owner subject FAIL, anotasi baris 0 FAIL, delivery mailbox hanya id + kata verdict, follow-up hanya untuk request-changes; validate + doctor check 11 LOLOS end-to-end |
 
 Baterai kasus langka: `rerun_rare_cases.py` menjalankan ulang 15 kasus dari
 `research_notes/rare-cases-theroster-20261115/report.md` terhadap script saat
