@@ -157,6 +157,16 @@ What is **not** enforced here, and why: there is no required `team-roster` statu
 
 For contributors, the guardrails are [CONTRIBUTING.md](CONTRIBUTING.md) (fork → feature branch → claim first → run all local checks → PR). See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
+## Feedback
+
+Tried it? Say what broke — that's how this gets better.
+
+- **Questions and ideas** → [Discussions](https://github.com/Rifkiend/TheRoster/discussions) (Q&A, Ideas, Show and tell — no form, just write it).
+- **Something doesn't work as documented** → [open a bug report](https://github.com/Rifkiend/TheRoster/issues/new?template=bug_report.md).
+- **Want a feature** → [open a feature request](https://github.com/Rifkiend/TheRoster/issues/new?template=feature_request.md).
+
+One concrete situation beats a general opinion: what you ran, what happened, what you expected.
+
 ## Known limits — what still NEEDS-SERVER
 
 Honest limits, stated plainly. v2 narrows every one of these; none of them is closed by a file-only skill.

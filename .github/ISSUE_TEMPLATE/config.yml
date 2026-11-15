@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Ask a question or share an idea
+    url: https://github.com/Rifkiend/TheRoster/discussions
+    about: Questions, ideas, and "does this fit my team?" go to Discussions — no issue form needed.
