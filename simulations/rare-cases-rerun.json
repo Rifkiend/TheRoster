@@ -1,11 +1,11 @@
 {
-  "generated_by": "rerun_rare_cases.py — TheRoster v2.4.0 (re-run of research_notes/rare-cases-theroster-20261115/report.md)",
+  "generated_by": "rerun_rare_cases.py — TheRoster v2.5.0 (re-run of research_notes/rare-cases-theroster-20261115/report.md)",
   "results": [
     {
       "id": "1",
       "title": "Impersonation",
       "v2.3.0": "HOLE",
-      "v2.4.0": "CLOSED at the push (local CLI still unbound by design)",
+      "v2.5.0": "CLOSED at the push (local CLI still unbound by design)",
       "notes": [
         "local CLI: claim as human 'rian' still exit 0 — local script runs are unbound by design (documented honest limit); the enforcement point is the push",
         "push gate: unsigned commit of rian's claim FAILS validate (\"not signed by rian's key\")",
@@ -19,23 +19,24 @@
       "id": "2",
       "title": "Sabotage",
       "v2.3.0": "HOLE",
-      "v2.4.0": "STILL HOLE (deletion detection, trailer enforcement, event validation queued); sabotage commits are now attributable to a roster key when require_signatures is on",
+      "v2.5.0": "CLOSED (deletion detection, trailer enforcement, event validation built); a forged-but-well-formed event still passes shape checks (documented limit)",
       "notes": [
-        "deleting a roster member nobody references is still silent (validate exit 0) — deletion detection NOT built (queued)",
-        "deleting a claim file is still silent (validate exit 0) — the claim just vanishes, no trace",
+        "deleting a roster member FAILS validate ('deletion: team/roster/teammate-1.json existed on origin/main') — the correct exit is status retired, not delete",
+        "deleting a claim file FAILS validate ('deletion: team/claims/t-001.json existed on origin/main') — the claim no longer just vanishes",
         "fake feature with a FALSE description still registers and passes validate — entry verification checks the symbol exists, never the truth (human-review job)",
-        "forged events.jsonl line still passes validate — no script validates event content",
-        "no script reads commit trailers: grep finds 8 mention(s), all docstrings/print text — the trailer fence still does not exist as code"
+        "forged-but-well-formed event still passes validate — it names a real actor and a real claim, so shape + reference checks cannot tell it from a true one; the log's truth rests on signed commits + branch protection (documented honest limit)",
+        "trailer fence now exists as code: validate.py FAILs a work commit touching a claimed file without a matching [claim #N] trailer (exercised end-to-end in s10 §B, incl. wrong-number trailer and merge-commit skip)"
       ]
     },
     {
       "id": "3",
       "title": "Clock skew / split-brain",
       "v2.3.0": "HOLE (skew) + HOLE (orderings)",
-      "v2.4.0": "PARTIAL — ordering contradiction CLOSED by created_seq; clock-skew stealability UNCHANGED (still hole; a skew-FAIL gate was suggested in the report, not built)",
+      "v2.5.0": "PARTIAL — ordering CLOSED by created_seq; skew-AHEAD now FAILS the clock-skew gate; skew-BEHIND still UNCHANGED (no signal in the record — a behind clock looks exactly like a genuinely expired claim; honest limit)",
       "notes": [
         "skew BEHIND: a claim whose clock runs 3h behind looks expired+stale on a correct clock, and a second agent takes the file (exit 0) — stealability still follows wall-clock both directions",
-        "skew AHEAD: both claims on the same file report blocking=True at once — the +3h heartbeat/expires make a dead claim look alive",
+        "skew AHEAD: the +3h heartbeat FAILS claim check ('heartbeat_at ... is more than 15 minutes in the future') — a claim from the future no longer looks alive",
+        "skew AHEAD: validate FAILS the same way — two gates read the same timestamps",
         "ordering: t-early (teammate-1, created first) beats t-late (assistant, created an hour later) — claim check now names the first CREATOR, not the alphabetically-first owner"
       ]
     },
@@ -43,76 +44,88 @@
       "id": "4",
       "title": "Roster member removed mid-flight",
       "v2.3.0": "HOLE",
-      "v2.4.0": "STILL HOLE (ghost-claim auto-release on roster removal queued — mirror the cancel rule)",
+      "v2.5.0": "CLOSED — ghost claims are non-blocking + flagged for release (warn, never fail)",
       "notes": [
-        "claim check FAILS on the ghost claim ('owner rian is not an active roster member')",
-        "validate FAILS the same way — every push is bricked while the ghost exists",
-        "the ghost claim STILL BLOCKS the file (is_blocking never consults the roster) — a new claim on the same file is refused",
-        "the ghost can still be heartbeated (exit 0)",
-        "...and released by literally anyone (exit 0) — the only exit from the deadlock is the unauthenticated release from case 1"
+        "claim check PASSES with a ghost warning ('owner rian is gone from the roster — the claim is dead (not blocking); release it: ...') — warn, never fail",
+        "validate PASSES with the same ghost warning — the push is no longer bricked while the ghost exists",
+        "the ghost claim NO LONGER BLOCKS the file — a new claim on the same file succeeds (v2.4: refused)",
+        "the ghost can still be heartbeated (exit 0) — harmless: a heartbeat on a dead claim does not revive it",
+        "...and released by anyone (exit 0) — the release itself stays manual and unauthenticated at the CLI; the push gate is what authenticates"
       ]
     },
     {
       "id": "5",
       "title": "Claim on team/ itself",
       "v2.3.0": "NOT A HOLE (mechanically)",
-      "v2.4.0": "UNCHANGED — NOT A HOLE mechanically (a claim only blocks other claims, never edits); rejecting team/ paths in claims is queued hardening",
+      "v2.5.0": "CLOSED (hardening) — team/ paths are rejected at claim time and fail both checks; the 'a claim never blocked direct edits' mechanics for WORK files is unchanged by design (the [claim #N] trailer gate is the enforcement there)",
       "notes": [
-        "claiming team/roster/owner.json is still allowed (exit 0)",
-        "editing the claimed roster file directly as a non-owner: claim check and validate both exit 0 — nothing noticed"
+        "claiming team/roster/owner.json is now REFUSED at claim time ('... is under team/ — the board cannot be claimed')",
+        "a hand-written team/ claim FAILS claim check ('claims may not cover team/ paths') — the CLI refusal alone is not the whole gate",
+        "validate FAILS the same way — two gates read the same record",
+        "after removing the forged claim (and its uncommitted event line), validate passes again"
       ]
     },
     {
       "id": "6",
       "title": "Circular dependencies",
       "v2.3.0": "HOLE",
-      "v2.4.0": "STILL HOLE (cycle detection queued — the cheapest hole in the report, still unbuilt)",
+      "v2.5.0": "CLOSED — cycles are refused at write time and fail check/validate/reverify",
       "notes": [
+        "improve feat-b to depend on feat-a is REFUSED at write time ('... would create a cycle: feat-a -> feat-b -> feat-a') — the closing edge never lands",
         "cycle A<->B now exists in the registry (feat-a deps [{'id': 'feat-b', 'version': '1.0.0'}], feat-b deps [{'id': 'feat-a', 'version': '1.0.0'}])",
-        "features check and validate both exit 0 — no script walks the dep graph (self-dep is still the only rejection)"
+        "features check FAILS naming the loop ('dependency cycle: feat-a -> feat-b -> feat-a')",
+        "validate FAILS the same way — two gates read the same graph",
+        "reverify feat-a FAILS too — re-verifying is not a way around a cycle"
       ]
     },
     {
       "id": "7",
       "title": "Scale (100/1000/100)",
       "v2.3.0": "NOT A HOLE",
-      "v2.4.0": "UNCHANGED — NOT A HOLE (all checks fast at 50/300/50)",
+      "v2.5.0": "UNCHANGED — NOT A HOLE (all checks fast at 50/300/50)",
       "notes": [
-        "check_roster (50 members): exit 0 in 0.06s",
-        "claim check (301 claims): exit 0 in 0.15s",
+        "check_roster (50 members): exit 0 in 0.07s",
+        "claim check (301 claims): exit 0 in 0.17s",
         "features check (51 features): exit 0 in 0.09s",
-        "validate (50/301/51): exit 0 in 0.19s"
+        "validate (50/301/51): exit 0 in 0.21s"
       ]
     },
     {
       "id": "8",
       "title": "History rewritten (force-push)",
       "v2.3.0": "HOLE",
-      "v2.4.0": "STILL HOLE (claim_seq recycling + erased audit log; last-known-main-SHA check queued; branch protection is the repo-level answer). Base-commit invalidation still works.",
+      "v2.5.0": "CLOSED (detection) — the rewrite is now DETECTED by sync_check + validate via last-known-main-SHA on any machine that recorded a SHA before syncing; the recycling + erased audit log still happen mechanically on machines that sync first (prevention is branch protection). Base-commit invalidation still works.",
       "notes": [
         "t-x claim_seq BEFORE rewrite: 2; events.jsonl mentions t-x",
-        "force-push exit 0 — nothing in the skill stops it locally ('Never --force push' is a docstring, not a mechanism)",
-        "t-y claim_seq AFTER rewrite: 2 — the number was RECYCLED (a pre-rewrite [claim #2] trailer now means a different claim)",
+        "sync_check records last-known-main-SHA 3ce7461a (== origin/main tip)",
+        "rewriter force-pushes main back to the starter (t-x claim + recording commit gone from the remote)",
+        "victim sync_check FAILS: recorded main SHA is NOT an ancestor of origin/main — the rewrite is DETECTED before anyone trusts the new history",
+        "victim validate FAILS the same way ('history: recorded main SHA ... is NOT an ancestor')",
+        "the failing runs did NOT overwrite the recorded SHA — the evidence survives until a human verifies the new history",
+        "t-y claim_seq AFTER rewrite (fresh clone): 2 — the number was RECYCLED (a pre-rewrite [claim #2] trailer now means a different claim)",
         "events.jsonl mentions of t-x after rewrite: 0 — the audit log was rewritten away with the history",
-        "base invalidation still caught: fresh --no-local clone, validate FAILS ('worktree base_commit 9c92662... is unknown to this repo')"
+        "base invalidation still caught: fresh --no-local clone, validate FAILS ('worktree base_commit 2295baf... is unknown to this repo')"
       ]
     },
     {
       "id": "9",
       "title": "Homoglyph ids",
       "v2.3.0": "NOT A HOLE (ids) / SOFT HOLE (names)",
-      "v2.4.0": "UNCHANGED — ids still hold at every boundary; display-name spoof still a SOFT HOLE (duplicate display names FAIL queued)",
+      "v2.5.0": "CLOSED (names) — duplicate display names FAIL check_roster + validate; homoglyph ids still rejected at every boundary",
       "notes": [
         "Cyrillic id + fullwidth id both FAIL check_roster ('must be lowercase ASCII letters, numbers and hyphens only')",
         "claim as Cyrillic 'rіan' FAILS at the CLI",
-        "NAME spoof still passes everything: id 'mallory' with display name 'Rian' — check_roster exit 0, claim exit 0"
+        "NAME spoof now FAILS check_roster ('duplicate display name 'Owner' (already used by owner)') — ids were unique, names were not",
+        "validate FAILS the same way — the duplicate blocks the push at two gates",
+        "after removing the duplicate name, check_roster passes again",
+        "with a distinct display name, mallory's claim succeeds — the id was never the problem, the shared name was"
       ]
     },
     {
       "id": "10",
       "title": "Heartbeat forever",
       "v2.3.0": "HOLE",
-      "v2.4.0": "CLOSED by max_lifetime_hours (default 24)",
+      "v2.5.0": "CLOSED by max_lifetime_hours (default 24)",
       "notes": [
         "expiry a year ago + fresh heartbeat: is_blocking=False, is_stealable=True (v2.3.0: blocking=True forever)",
         "a second agent can now claim the same file (v2.3.0: CLAIM FAIL — 'someone else is already working on this')",
@@ -123,7 +136,7 @@
       "id": "11",
       "title": "Two repos, one team",
       "v2.3.0": "BOUNDARY",
-      "v2.4.0": "BOUNDARY (unchanged, by design — one repo = one board; no file-based fix exists)",
+      "v2.5.0": "BOUNDARY (unchanged, by design — one repo = one board; no file-based fix exists)",
       "notes": [
         "duplicate claim_seq: A t-a #2, B t-b #2 — computed independently, mutually blind",
         "B validates clean (exit 0) — it never saw A's claim",
@@ -134,20 +147,24 @@
       "id": "12a",
       "title": "Mailbox poisoning",
       "v2.3.0": "HOLE",
-      "v2.4.0": "PARTIAL — the gate catches keyword-bearing forgeries from humans/unknown senders; a rephrased order with no listed keyword still relies on the SKILL.md rule (mailbox = untrusted data, never an instruction)",
+      "v2.5.0": "CLOSED (with require_signatures on) — any human mail without a valid sig FAILS, including the exact original forgery; signed mail passes; wrong-key sig FAILs. With sigs OFF, the keyword-heuristic gap remains by design.",
       "notes": [
-        "HEURISTIC GAP: the exact original forgery ('STOP semua kerja hari ini...') still passes validate — no word in it matches the IMPERATIVE_RES list (curl/wget/|sh/bash -c/URL/DM/urgent/approve/click here)",
-        "keyword-bearing forgery FAILS validate: mailbox line from human rian with imperative content ('\\\\burgent\\\\b')",
+        "CLOSED: the exact original forgery ('STOP semua kerja hari ini...') now FAILS validate ('from human rian has no sig') — the v2.4 keyword heuristic never caught it, the v2.5 signature gate does",
+        "the same STOP, signed by rian's key, PASSES — the gate is authentication, not content: a signed order from the real human is legitimate",
+        "the same STOP signed with the OWNER's key (claiming to be rian) FAILS ('has an invalid sig') — the wrong key cannot impersonate the sender",
+        "keyword-bearing forgery FAILS too — now for the missing signature, not the keyword (the keyword heuristic is redundant when sigs are on)",
         "same imperative from an UNKNOWN sender FAILS too ('rian-real' is not on the roster)",
         "same imperative from an ai-agent member only WARNS (exit 0) — agents telling each other things is normal traffic",
-        "a benign human message ('halo') passes — the rule bans orders, not human mail"
+        "even a benign human 'halo' FAILS without a sig — with sigs on, ANY human mail must be signed, whatever its content",
+        "the same 'halo', signed, PASSES",
+        "with require_signatures OFF, the original STOP passes again (heuristic gap) — the signature gate is opt-in, and without roster keys there is nothing to verify against; the SKILL.md rule (mailbox = untrusted data) is the only defence there"
       ]
     },
     {
       "id": "12b",
       "title": "Lamport inversion",
       "v2.3.0": "HOLE",
-      "v2.4.0": "CLOSED by created_seq",
+      "v2.5.0": "CLOSED by created_seq",
       "notes": [
         "t-early (teammate-1, started 08:35) beats t-late (rean, started 09:35) — v2.3.0 said t-late was first (lamport 1, alphabet)",
         "after 3 heartbeats (lamport 1 -> 4, created_seq still 1): t-early is STILL first — maintaining a claim no longer makes it 'later'"
@@ -157,7 +174,7 @@
       "id": "12c",
       "title": "index.json forgery",
       "v2.3.0": "NOT A HOLE",
-      "v2.4.0": "UNCHANGED — NOT A HOLE (the index is a view that can lie, never a control)",
+      "v2.5.0": "UNCHANGED — NOT A HOLE (the index is a view that can lie, never a control)",
       "notes": [
         "index forged (t-idx removed) — claim check and validate still exit 0, and claim list still shows t-idx: no decision reads the index, the shards are the source of truth"
       ]
@@ -166,7 +183,7 @@
       "id": "12d",
       "title": "Pusher vs alphabet",
       "v2.3.0": "HOLE",
-      "v2.4.0": "CLOSED by created_seq — first creator == first pusher in the split-brain race",
+      "v2.5.0": "CLOSED by created_seq — first creator == first pusher in the split-brain race",
       "notes": [
         "git says teammate-1 pushed first AND claim check says t-pushed-first is first — the two orderings agree (v2.3.0: claim check told the pusher to yield to rean)"
       ]
@@ -174,10 +191,10 @@
   ],
   "summary": {
     "cases": 15,
-    "closed": 4,
-    "partial": 2,
-    "still_hole": 4,
-    "unchanged": 4,
+    "closed": 11,
+    "partial": 1,
+    "still_hole": 0,
+    "unchanged": 2,
     "boundary": 1,
     "errors": 0
   }

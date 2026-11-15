@@ -56,6 +56,31 @@ Checks:
   roster member, or from a sender the roster does not know, FAILS;
   from an ai-agent/tool member it warns. Human orders arrive only
   via a human-approved PR or a signed record.
+  v2.5: when require_signatures is on, a line from a HUMAN member
+  MUST carry a valid `sig` from that sender's roster key — any
+  content, any wording (the keyword heuristic could not catch a
+  rephrased order). A `sig`, when present on an agent line, is
+  verified too — present-but-invalid FAILS.
+- ghost claims (v2.5): a claim whose owner is gone from the roster
+  is automatically non-blocking and flagged for release (warning,
+  not an error); it never holds files or bricks a push.
+- clock-skew gate (v2.5): a claim timestamp more than 15 minutes in
+  the future FAILS, as do expires_at / heartbeat_at before
+  started_at. The same future check applies to event timestamps.
+- claims may not cover team/ paths (v2.5); duplicate display names
+  FAIL (v2.5); dependency cycles FAIL (v2.5).
+- sabotage detection (v2.5, push range): a deleted team/ record
+  file FAILS unless it never existed on the range base; every work
+  commit touching a file covered by a blocking claim must carry a
+  matching [claim #N] trailer (and, with require_signatures on, be
+  signed by the claim owner's key); the recorded last-known-main-SHA
+  must still be an ancestor of origin/main, or history was rewritten.
+- event validation (v2.5): every team/events.jsonl line must be
+  well-formed JSON with a parseable timestamp, a roster actor (or
+  the system actor "v1-migration", or a composite flags:/cancel:
+  actor), and task_id/feature_id references to records that exist.
+  Shape and references only — a forged-but-well-formed event still
+  passes; the log's truth rests on signed commits + branch protection.
 - "first" in double-claim conflicts is decided by (created_seq,
   owner_id) (v2.4), never by wall-clock — and no longer by lamport.
 - ownership of team/ records, in the push range
@@ -149,6 +174,38 @@ def git_log_renames(range_spec):
     return out
 
 
+def git_log_deletions(range_spec):
+    """Paths deleted in a range (sorted, de-duplicated), or None.
+
+    v2.5 (deletion detection): --no-renames matters — without it a
+    rename out of team/ reports as R, not D, and a claim file
+    renamed away would slip past as a "move". With it, a rename
+    reports as a deletion + an addition, and the deletion half is
+    what this check wants."""
+    r = tc.run_git(["log", "--pretty=format:", "--name-only",
+                    "--diff-filter=D", "--no-renames", range_spec])
+    if r.returncode != 0:
+        return None
+    return sorted({ln.strip() for ln in r.stdout.splitlines() if ln.strip()})
+
+
+def git_commit_parents(sha):
+    """Parent SHAs of one commit (empty list for a root commit,
+    None when git cannot read it)."""
+    r = tc.run_git(["show", "--pretty=%P", "--no-patch", sha])
+    if r.returncode != 0:
+        return None
+    return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+
+
+def git_commit_message(sha):
+    """Full commit message (subject + body) of one commit."""
+    r = tc.run_git(["log", "-1", "--format=%B", sha])
+    if r.returncode != 0:
+        return ""
+    return r.stdout
+
+
 def record_at_head(path):
     r = tc.run_git(["show", "HEAD:" + path])
     if r.returncode != 0:
@@ -224,10 +281,40 @@ def main():
         if not tc.valid_id(tid):
             errors.append(f"{label}: task_id fails the id grammar")
         if c.get("owner_id") not in active_ids:
-            errors.append(f"{label}: owner {c.get('owner_id')} is not an active roster member")
+            if c.get("owner_id") not in all_ids:
+                # Ghost claim (v2.5): the owner is gone from the roster
+                # entirely — the claim is dead, not blocking, and must
+                # never brick a push. Warn (with the release command);
+                # every is_blocking() call below already excludes it.
+                if c.get("status") == "active":
+                    warnings.append(f"{label}: owner {c.get('owner_id')} is gone from the roster — "
+                                    "the claim is dead (not blocking); release it: "
+                                    f"python3 scripts/claim.py release --task {tid} --by <you>")
+            else:
+                errors.append(f"{label}: owner {c.get('owner_id')} is not an active roster member")
         for tf in ("started_at", "expires_at", "heartbeat_at"):
             if c.get(tf) and tc.parse_time(c[tf]) is None:
                 errors.append(f"{label}: {tf} must be a UTC ISO-8601 timestamp ending in Z (got {c[tf]!r})")
+        # Clock-skew gate (v2.5): started_at / heartbeat_at more
+        # than 15 minutes in the future vs the local clock are
+        # impossible — a skewed clock wrote this claim. expires_at is
+        # NOT futureness-gated: it is a promise about the future
+        # (now + TTL, default 2h), so a fresh claim legitimately
+        # expires hours ahead. expires_at is only ordering-checked.
+        _started = tc.parse_time(c.get("started_at") or "")
+        _expires = tc.parse_time(c.get("expires_at") or "")
+        _heartbeat = tc.parse_time(c.get("heartbeat_at") or "")
+        for _tf, _dt in (("started_at", _started),
+                         ("heartbeat_at", _heartbeat)):
+            if _dt is not None and tc.is_impossibly_future(_dt):
+                errors.append(f"{label}: {_tf} {c[_tf]} is more than {tc.CLOCK_SKEW_FAIL_MINUTES} minutes "
+                              "in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim")
+        if _started is not None and _expires is not None and _expires < _started:
+            errors.append(f"{label}: expires_at {c['expires_at']} is before started_at {c['started_at']} — "
+                          "impossible; the claim's timestamps contradict each other")
+        if _started is not None and _heartbeat is not None and _heartbeat < _started:
+            errors.append(f"{label}: heartbeat_at {c['heartbeat_at']} is before started_at {c['started_at']} — "
+                          "impossible; a heartbeat cannot predate the claim")
         if not isinstance(c.get("lamport"), int) or c.get("lamport", 0) < 1:
             errors.append(f"{label}: lamport must be an int >= 1")
         scope = c.get("scope") or {}
@@ -244,13 +331,17 @@ def main():
             err = tc.path_syntax_error(f)
             if err:
                 errors.append(f"{label}: {err}")
+            # v2.5: the board cannot be claimed.
+            if f == "team" or str(f).startswith("team/"):
+                errors.append(f"{label}: claims may not cover team/ paths ({f!r}) — "
+                              "the board cannot be claimed; claim the work files, not the roster/ledger itself")
         if c.get("reserves_feature") and not tc.valid_id(c["reserves_feature"]):
             errors.append(f"{label}: reserves_feature id fails the id grammar")
         if c.get("status") not in ("active", "done", "released", "stalled", "abandoned"):
             errors.append(f"{label}: unknown status {c.get('status')!r}")
     owner_counts = {}
     for tid, c in claims.items():
-        if tc.is_blocking(c, cfg=cfg):
+        if tc.is_blocking(c, cfg=cfg, roster_ids=all_ids):
             owner_counts[c.get("owner_id")] = owner_counts.get(c.get("owner_id"), 0) + 1
     for owner, n in sorted(owner_counts.items()):
         if n > cfg["max_claims_per_agent"]:
@@ -259,9 +350,10 @@ def main():
     # ---- double claims: two blocking claims on the same file --------
     # "First" is decided by (created_seq, owner_id), never by wall-clock
     # (and no longer by lamport — heartbeating bumps lamport).
+    # Ghost claims (v2.5) are not blocking, so they never conflict.
     by_file = {}
     for tid, c in claims.items():
-        if not tc.is_blocking(c, cfg=cfg):
+        if not tc.is_blocking(c, cfg=cfg, roster_ids=all_ids):
             continue
         for f in c.get("files") or []:
             by_file.setdefault(tc.canonical_path(f), []).append((tid, c, f))
@@ -283,7 +375,8 @@ def main():
         errors.append(f"CONFLICT: file {first[2]} claimed by both {first[0]} and {', '.join(losers)} — "
                       f"first by (created_seq, owner) is {first[0]} (created_seq {first[1].get('created_seq') or first[1].get('lamport')}), "
                       f"so {', '.join(losers)} must yield")
-    blocking_claims = [(t, c) for t, c in claims.items() if tc.is_blocking(c, cfg=cfg)]
+    blocking_claims = [(t, c) for t, c in claims.items()
+                       if tc.is_blocking(c, cfg=cfg, roster_ids=all_ids)]
     for i in range(len(blocking_claims)):
         for j in range(i + 1, len(blocking_claims)):
             t1, c1 = blocking_claims[i]
@@ -425,16 +518,22 @@ def main():
             continue
         if prd_item not in prd:
             errors.append(f"claim {tid}: prd_item {prd_item} does not exist — create it with prd.py, or re-claim without --prd")
-        elif tc.is_blocking(c, cfg=cfg) and prd[prd_item].get("status") in ("cancelled", "done"):
+        elif tc.is_blocking(c, cfg=cfg, roster_ids=all_ids) and prd[prd_item].get("status") in ("cancelled", "done"):
             errors.append(f"claim {tid}: works on PRD item {prd_item}, which is {prd[prd_item].get('status')} — "
                           "release this claim; there is nothing to work on")
     if cfg.get("prd_required"):
         for tid, c in sorted(claims.items()):
-            if tc.is_blocking(c, cfg=cfg) and not (c.get("prd_item") or ""):
+            if tc.is_blocking(c, cfg=cfg, roster_ids=all_ids) and not (c.get("prd_item") or ""):
                 errors.append(f"claim {tid}: team/config.json has prd_required=true but this claim names no PRD item")
 
     # ---- dependencies (v2.2): a recorded version may not be newer
     # than what exists, and a MAJOR bump upstream means re-verify ---
+    # Dependency cycles (v2.5): a loop can never be topologically
+    # sorted, so it FAILS here (and at write time in features.py).
+    cycle = tc.find_dependency_cycle(features)
+    if cycle:
+        errors.append("dependency cycle: %s — break the loop (remove one depends_on edge); "
+                      "a cycle can never be topologically sorted" % " -> ".join(cycle))
     for fid, f in sorted(features.items()):
         label = "feature %s" % fid
         for dep in f.get("depends_on") or []:
@@ -455,6 +554,23 @@ def main():
                         errors.append(msg)
                     else:
                         warnings.append(msg)
+
+    # ---- duplicate display names (v2.5): ids are unique, but names
+    # are what humans read — two members named "Rian" FAIL, whatever
+    # their ids say. check_roster.py enforces the same rule; this is
+    # defense in depth for runs that only call validate.py.
+    import check_roster as _cr
+    seen_names = {}
+    for rid, m in sorted(roster.items()):
+        name = m.get("name", "")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        norm = _cr.normalize_display_name(name)
+        if norm in seen_names:
+            errors.append(f"roster: duplicate display name {name!r} — {seen_names[norm]} and {rid} share it; "
+                          "display names must be unique; ids are unique, but names are what humans read")
+        else:
+            seen_names[norm] = rid
 
     # ---- branch freshness (current branch) -------------------------
     root = tc.git_root()
@@ -510,6 +626,47 @@ def main():
             changed = []
         team_changed = [p for p in changed
                         if any(p.startswith(pref + "/") for pref in TEAM_PREFIXES)]
+        # Deletion detection (v2.5): a team/ record deleted in the
+        # push range FAILS — the record IS the audit trail, and the
+        # correct lifecycle is release/cancel/retire, never delete.
+        # (The ownership block below silently skips deleted files —
+        # record_at_head returns None for them — so this check has to
+        # live here, outside `if team_changed:`.) Exception: a file
+        # added AND deleted inside the same range never existed on
+        # the shared history, so nothing was erased — that warns.
+        deletions = git_log_deletions(range_spec)
+        if deletions is None:
+            warnings.append("deletion check skipped: git log failed for range %s" % range_spec)
+        else:
+            if ".." in range_spec:
+                del_base = range_spec.split("..")[0]
+            elif tc.run_git(["rev-parse", "--verify", "--quiet", "HEAD~1"]).returncode == 0:
+                del_base = "HEAD~1"
+            else:
+                del_base = None
+            del_protected = ("team/roster/", "team/claims/", "team/features/",
+                             "team/prd/", "team/handoffs/")
+            for path in deletions:
+                if path in ("team/events.jsonl", "team/config.json"):
+                    protected_hit = True
+                elif any(path.startswith(p) for p in del_protected):
+                    protected_hit = True
+                else:
+                    protected_hit = False
+                if not protected_hit:
+                    continue
+                if del_base is None:
+                    warnings.append(f"deletion: {path} was deleted in this push, but there is no range base "
+                                    "to check it against — verify by hand that the record was not shared history")
+                    continue
+                r = tc.run_git(["show", "%s:%s" % (del_base, path)])
+                if r.returncode == 0:
+                    errors.append(f"deletion: {path} existed on {del_base} and was deleted in this push — "
+                                  "team/ records are never deleted; release the claim, cancel the feature, "
+                                  "or retire the member instead (deletion erases the audit trail)")
+                else:
+                    warnings.append(f"deletion: {path} was added and deleted inside this push — it never "
+                                    "existed on the shared history, so nothing was erased")
         if team_changed:
             added = git_log_names(range_spec, ["--diff-filter=A"]) or []
             new_roster_ids = {os.path.basename(p)[:-5] for p in added
@@ -649,8 +806,172 @@ def main():
                         if not ok:
                             errors.append(f"signature: commit {sha[:8]} is not signed by {actor}'s key — "
                                           f"{err or 'unsigned or signed by a different key'}")
+        # Last-known-main-SHA (v2.5): the recorded main SHA must still
+        # be an ancestor of origin/main — otherwise the remote history
+        # was rewritten (force-push). No recorded SHA yet warns only.
+        _hstatus, _hmsg = tc.check_main_history(
+            root, cfg["canonical_remote"], cfg["canonical_branch"],
+            cfg.get("last_known_main_sha") or "")
+        if _hstatus == "fail":
+            errors.append("history: " + _hmsg)
+        elif _hstatus in ("unrecorded", "unknown"):
+            warnings.append("history: " + _hmsg)
+        # Trailer enforcement (v2.5): the [claim #N] fence is now
+        # read, not just documented. A work commit touching a file
+        # covered by a blocking claim must carry a trailer matching
+        # that claim's claim_seq — and, when require_signatures is
+        # on, the commit must also verify against the claim owner's
+        # key (a trailer alone is a claim on a number; only a
+        # signature binds the number to a person). Merge commits are
+        # skipped (their content is the union of commits checked
+        # individually); commits touching only team/ are record
+        # commits, not work; the bootstrap push skips with a warning.
+        if bootstrap:
+            warnings.append("trailer checks skipped on the bootstrap push — the first team setup "
+                            "lands claim files and work files together; the fence applies from the next push")
+        else:
+            _tcommits = git_log_commits(range_spec)
+            if _tcommits is None:
+                warnings.append("trailer checks skipped: git log failed for range %s" % range_spec)
+            else:
+                for _sha in _tcommits:
+                    _parents = git_commit_parents(_sha)
+                    if _parents is not None and len(_parents) > 1:
+                        continue
+                    _msg = git_commit_message(_sha)
+                    _trailers = {int(n) for n in re.findall(r"\[claim #(\d+)\]", _msg or "")}
+                    _work = [p for p in git_show_names(_sha)
+                             if not any(p.startswith(pref + "/") for pref in TEAM_PREFIXES)]
+                    if not _work:
+                        continue
+                    for _wp in _work:
+                        _covering = [(t, c) for t, c in blocking_claims
+                                     if any(tc.paths_overlap(_wp, f) for f in (c.get("files") or []))]
+                        if not _covering:
+                            continue
+                        _ok = False
+                        for _t, _c in _covering:
+                            if _c.get("claim_seq") not in _trailers:
+                                continue
+                            if not cfg.get("require_signatures"):
+                                _ok = True
+                                break
+                            _owner = _c.get("owner_id") or ""
+                            _key = (roster.get(_owner) or {}).get("public_key") or ""
+                            if _key:
+                                _sok, _serr = tc.verify_commit_signature(
+                                    root, _sha, _key, principal=_owner)
+                                if _sok:
+                                    _ok = True
+                                    break
+                        if not _ok:
+                            _seqs = sorted({_c.get("claim_seq") for _t, _c in _covering
+                                            if _c.get("claim_seq")})
+                            _owners = ", ".join(sorted(t for t, _c in _covering))
+                            _extra = (" and signed by the claim owner's key"
+                                      if cfg.get("require_signatures") else "")
+                            errors.append(f"trailer: commit {_sha[:8]} touches {_wp}, claimed by {_owners} "
+                                          f"(claim #{', #'.join(str(s) for s in _seqs)}) — the commit carries no "
+                                          f"matching [claim #N] trailer{_extra}; add the trailer (claim.py prints it) "
+                                          "and re-commit")
     else:
         warnings.append("push-range checks skipped: not in a git repo")
+
+    # ---- event validation (v2.5): team/events.jsonl is the audit
+    # log, and until now no script ever read it. Every line must be
+    # well-formed JSON with a parseable timestamp. NEW lines (beyond
+    # the push-range base — i.e. not yet on the shared history) must
+    # also name a roster actor and reference records that exist.
+    # OLD lines (already on the shared history) get shape checks
+    # only: they were validated when pushed, and the world has moved
+    # on since — a member named in an old line may have left, a
+    # claim named in one may have been released long ago. Checking
+    # old lines against the CURRENT roster would make every ghost
+    # fail validation, defeating the ghost gate (warn, never fail).
+    # Same reason member_id is NOT validated at all.
+    # Allowed actors: roster ids, composite actors (flags:a,b /
+    # cancel:x, parts must be roster ids), and the system actor
+    # "v1-migration" (written once by migrate_v1_to_v2.py).
+    # What this does NOT do is semantic cross-checks (a
+    # forged-but-well-formed event that references real records
+    # still passes shape checks) — the log's truth rests on signed
+    # commits (v2.4) + branch protection. Say so plainly; a shape
+    # check is not a truth check. No range base (first push / no
+    # git) → every line is new.
+    events_path = os.path.join(team_dir, "events.jsonl")
+    events_base_count = 0
+    if os.path.isfile(events_path):
+        try:
+            with open(events_path, encoding="utf-8") as fh:
+                elines = fh.read().splitlines()
+        except OSError as e:
+            warnings.append(f"events: cannot read {events_path} ({e})")
+            elines = []
+        # How many leading lines are already on the shared history?
+        if root:
+            _ref = "%s/%s" % (cfg["canonical_remote"], cfg["canonical_branch"])
+            if args.range:
+                _ebase = args.range.split("..")[0] if ".." in args.range else None
+            elif tc.run_git(["rev-parse", "--verify", "--quiet", _ref]).returncode == 0:
+                _ebase = _ref
+            elif tc.run_git(["rev-parse", "--verify", "--quiet", "HEAD~1"]).returncode == 0:
+                _ebase = "HEAD~1"
+            else:
+                _ebase = None
+            if _ebase:
+                _r = tc.run_git(["show", "%s:team/events.jsonl" % _ebase])
+                if _r.returncode == 0:
+                    events_base_count = len(_r.stdout.splitlines())
+        for lineno, line in enumerate(elines, 1):
+            if not line.strip():
+                continue
+            try:
+                import json
+                ev = json.loads(line)
+            except ValueError:
+                errors.append(f"events: line {lineno} is not valid JSON — the audit log is corrupt; "
+                              "fix the line, do not delete it")
+                continue
+            if not isinstance(ev, dict):
+                errors.append(f"events: line {lineno} is not a JSON object")
+                continue
+            elabel = f"events: line {lineno}"
+            if not isinstance(ev.get("event"), str) or not ev["event"].strip():
+                errors.append(f"{elabel}: missing/empty 'event'")
+            ts_raw = ev.get("at") or ev.get("ts") or ""
+            ts = tc.parse_time(ts_raw) if isinstance(ts_raw, str) else None
+            if not ts_raw or ts is None:
+                errors.append(f"{elabel}: missing/unparseable timestamp ('at' or legacy 'ts', "
+                              f"UTC ISO-8601 ending in Z, got {ts_raw!r})")
+            is_new = lineno > events_base_count
+            if is_new and ts is not None and tc.is_impossibly_future(ts):
+                errors.append(f"{elabel}: timestamp {ts_raw} is more than {tc.CLOCK_SKEW_FAIL_MINUTES} minutes "
+                              "in the future — a skewed clock wrote this event")
+            if not isinstance(ev.get("lamport"), int) or ev.get("lamport", 0) < 1:
+                errors.append(f"{elabel}: lamport must be an int >= 1")
+            if not is_new:
+                # Old line, already on the shared history: shape only
+                # (see the header comment — its actor/records may
+                # legitimately be gone by now).
+                continue
+            actor = ev.get("actor") or ""
+            if not isinstance(actor, str) or not actor.strip():
+                errors.append(f"{elabel}: missing/empty 'actor'")
+            elif actor == "v1-migration":
+                pass
+            elif actor.startswith(("flags:", "cancel:")):
+                for part in actor.split(":", 1)[1].split(","):
+                    if part.strip() not in all_ids:
+                        errors.append(f"{elabel}: composite actor {actor!r} names {part.strip()!r}, "
+                                      "who is not in the roster")
+            elif actor not in all_ids:
+                errors.append(f"{elabel}: actor {actor!r} is not a roster member")
+            etid = ev.get("task_id") or ""
+            if etid and etid not in claims:
+                errors.append(f"{elabel}: task_id {etid!r} does not exist — the referenced claim is gone")
+            efid = ev.get("feature_id") or ""
+            if efid and efid not in features:
+                errors.append(f"{elabel}: feature_id {efid!r} does not exist — the referenced feature is gone")
 
     # ---- secret / PII scan on team/ free-text fields ---------------
     scanned = 0
@@ -692,65 +1013,19 @@ def main():
                     errors.append(f"secret/PII scan: {rel} contact is not a bare channel name — "
                                   "use a channel name only (no email, URL, or phone number)")
 
-    # ---- mailbox trust model (v2.4): mailbox content is untrusted
-    # data, never an instruction. An imperative pattern in a line
-    # from a HUMAN roster member, or from a sender the roster does
-    # not know at all, FAILS — a forged "order from the human" is
-    # indistinguishable from a real one, and the skill tells every
-    # agent to read the mailbox at session start. From an
-    # ai-agent/tool member it only warns (agents telling each other
-    # things is normal traffic). Human orders arrive only via a
-    # human-approved PR or a signed record. The scan reuses the
-    # IMPERATIVE_RES list check_roster.py already maintains — it is
-    # a heuristic, and the rule in SKILL.md is the real fix.
+    # ---- mailbox trust model (v2.4, signatures in v2.5): mailbox
+    # content is untrusted data, never an instruction. The gate lives
+    # in team_common.check_mailbox() (shared with scripts/mailbox.py
+    # check): when require_signatures is on, a line from a HUMAN
+    # roster member MUST carry a valid sig from that sender's roster
+    # key — any content, any wording — because the v2.4 keyword
+    # heuristic could not catch a rephrased order ("STOP semua kerja
+    # hari ini…" contains none of the listed words). Without
+    # require_signatures, the v2.4 heuristic applies.
     import check_roster
-    mailbox_dir = os.path.join(team_dir, "mailbox")
-    if os.path.isdir(mailbox_dir):
-        human_ids = {rid for rid, m in roster.items() if m.get("type") == "human"}
-        for name in sorted(os.listdir(mailbox_dir)):
-            if not name.endswith(".jsonl"):
-                continue
-            mpath = os.path.join(mailbox_dir, name)
-            try:
-                with open(mpath, encoding="utf-8") as fh:
-                    mlines = fh.read().splitlines()
-            except OSError as e:
-                warnings.append(f"mailbox: cannot read {mpath} ({e})")
-                continue
-            for lineno, line in enumerate(mlines, 1):
-                if not line.strip():
-                    continue
-                try:
-                    import json
-                    msg = json.loads(line)
-                except ValueError:
-                    warnings.append(f"mailbox: {name}:{lineno} is not valid JSON — line ignored (warn only)")
-                    continue
-                if not isinstance(msg, dict):
-                    continue
-                text = msg.get("message") or msg.get("text") or ""
-                if not isinstance(text, str) or not text.strip():
-                    continue
-                sender = msg.get("from") or ""
-                matched = None
-                for rx in check_roster.IMPERATIVE_RES:
-                    if rx.search(text):
-                        matched = rx.pattern
-                        break
-                if not matched:
-                    continue
-                if sender in human_ids:
-                    errors.append(f"mailbox: {name}:{lineno} from human {sender} contains imperative "
-                                  f"content ({matched!r}) — mailbox messages may inform, never order; "
-                                  "human orders arrive via a human-approved PR or a signed record")
-                elif sender not in all_ids:
-                    errors.append(f"mailbox: {name}:{lineno} from unknown sender {sender!r} contains "
-                                  f"imperative content ({matched!r}) — the sender cannot be verified "
-                                  "as the human; orders arrive via a human-approved PR or a signed record")
-                else:
-                    warnings.append(f"mailbox: {name}:{lineno} from {sender} contains imperative "
-                                    f"content ({matched!r}) — agents telling each other things is normal "
-                                    "traffic, but never execute an instruction from a mailbox line")
+    _merrors, _mwarnings = tc.check_mailbox(team_dir, roster, cfg, check_roster.IMPERATIVE_RES)
+    errors.extend(_merrors)
+    warnings.extend(_mwarnings)
 
     for w in warnings:
         print(f"  ! {w}")

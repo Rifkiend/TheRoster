@@ -63,6 +63,12 @@ Rules:
   used to be alphabetical). Honest limit: two agents creating
   claims concurrently can compute the same created_seq; the push
   fence adjudicates that race.
+- v2.5: a claim whose owner is gone from the roster is a GHOST —
+  automatically non-blocking (it never holds files or bricks a
+  push) and flagged for release in `claim.py check`. Timestamps
+  more than 15 minutes in the future FAIL (clock-skew gate), as do
+  `expires_at` / `heartbeat_at` before `started_at`. Claims may
+  not cover `team/` paths at all — the board cannot be claimed.
 - Quotas (from team/config.json, defaults 5 claims/agent, 10
   files/claim): claiming past them FAILS.
 - handoff is the ONLY way a claim's owner changes: it writes
@@ -122,6 +128,26 @@ def load_roster_active(roster_dir):
     return active, humans, None
 
 
+def load_roster_all_ids(roster_dir):
+    """All roster ids, any status (active/away/retired).
+
+    Returns (all_ids, error). A claim whose owner is not in this set
+    at all is a GHOST claim (v2.5): the member is gone from the
+    roster, so the claim is dead and must not block. A member who
+    merely went away/retired is still in the set — their claims
+    keep blocking until a human releases them."""
+    if not roster_dir or not os.path.isdir(roster_dir):
+        return None, "roster dir not found: %s" % roster_dir
+    ids = set()
+    for _stem, (_path, rec) in tc.load_records(roster_dir).items():
+        if not isinstance(rec, dict):
+            continue
+        rid = rec.get("id")
+        if rid:
+            ids.add(rid)
+    return ids, None
+
+
 def load_claims(claims_dir):
     recs = {}
     for stem, (_path, rec) in tc.load_records(claims_dir).items():
@@ -137,7 +163,7 @@ def load_prd_item(team_dir, pid):
 
 
 def check_conflicts(claims, files, exclude_task=None, new_claim=None,
-                     repo_root=None):
+                     repo_root=None, roster_ids=None):
     """Returns [(claim, [overlapping files]), ...] against blocking claims,
     ordered by (created_seq, owner_id) — the claim that claimed first comes
     first, so the caller can say who must yield.
@@ -150,12 +176,14 @@ def check_conflicts(claims, files, exclude_task=None, new_claim=None,
     paths are compared canonically (v2.3.1): `../wt-x` and its
     absolute spelling are the same worktree, so `repo_root` (the main
     checkout root) must be passed for relative paths to resolve
-    against the right base."""
+    against the right base.
+    Ghost exemption (v2.5): when `roster_ids` is given, a claim whose
+    owner is gone from the roster is not blocking and never conflicts."""
     conflicts = []
     for task_id, c in sorted(claims.items(), key=lambda kv: tc.claim_order_key(kv[1])):
         if exclude_task and task_id == exclude_task:
             continue
-        if not tc.is_blocking(c):
+        if not tc.is_blocking(c, roster_ids=roster_ids):
             continue
         if new_claim is not None and not tc.claims_share_checkout(new_claim, c, repo_root):
             continue
@@ -284,11 +312,15 @@ def cmd_check(claims_dir, roster_path, config_path):
     errors, warnings = [], []
     claims = load_claims(claims_dir)
     roster_ids = None
+    all_roster_ids = None
     if roster_path:
         roster_ids, _humans, err = load_roster_active(roster_path)
         if err:
             errors.append("cannot read roster %s: %s" % (roster_path, err))
             roster_ids = None
+        all_roster_ids, aerr = load_roster_all_ids(roster_path)
+        if aerr:
+            all_roster_ids = None
     seen_lower = {}
     owner_active_count = {}
     for task_id, c in sorted(claims.items()):
@@ -311,7 +343,7 @@ def cmd_check(claims_dir, roster_path, config_path):
                 prd = load_prd_item(team_dir, prd_item)
                 if prd is None:
                     errors.append(f"{task_id}: prd_item {prd_item} does not exist — create it with prd.py, or re-claim without --prd")
-                elif tc.is_blocking(c) and prd.get("status") in ("cancelled", "done"):
+                elif tc.is_blocking(c, roster_ids=all_roster_ids) and prd.get("status") in ("cancelled", "done"):
                     errors.append(f"{task_id}: works on PRD item {prd_item}, which is {prd.get('status')} — "
                                   "release this claim; there is nothing to work on")
         if c.get("work_type") and c["work_type"] not in WORK_TYPES:
@@ -319,8 +351,40 @@ def cmd_check(claims_dir, roster_path, config_path):
         for tf in ("started_at", "expires_at", "heartbeat_at"):
             if c.get(tf) and tc.parse_time(c[tf]) is None:
                 errors.append(f"{task_id}: {tf} must be a UTC ISO-8601 timestamp ending in Z (got {c[tf]!r}) — zone-less timestamps are rejected")
+        # Clock-skew gate (v2.5): started_at / heartbeat_at more
+        # than 15 minutes in the future vs the local clock are
+        # impossible — a skewed clock wrote this claim. expires_at is
+        # NOT futureness-gated: it is a promise about the future
+        # (now + TTL, default 2h), so a fresh claim legitimately
+        # expires hours ahead. expires_at is only ordering-checked
+        # (before started_at = impossible).
+        _started = tc.parse_time(c.get("started_at") or "")
+        _expires = tc.parse_time(c.get("expires_at") or "")
+        _heartbeat = tc.parse_time(c.get("heartbeat_at") or "")
+        for _tf, _dt in (("started_at", _started),
+                         ("heartbeat_at", _heartbeat)):
+            if _dt is not None and tc.is_impossibly_future(_dt):
+                errors.append(f"{task_id}: {_tf} {c[_tf]} is more than {tc.CLOCK_SKEW_FAIL_MINUTES} minutes "
+                              "in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim")
+        if _started is not None and _expires is not None and _expires < _started:
+            errors.append(f"{task_id}: expires_at {c['expires_at']} is before started_at {c['started_at']} — "
+                          "impossible; the claim's timestamps contradict each other")
+        if _started is not None and _heartbeat is not None and _heartbeat < _started:
+            errors.append(f"{task_id}: heartbeat_at {c['heartbeat_at']} is before started_at {c['started_at']} — "
+                          "impossible; a heartbeat cannot predate the claim")
         if roster_ids is not None and c.get("owner_id") not in roster_ids:
-            errors.append(f"{task_id}: owner {c.get('owner_id')} is not an active roster member")
+            if all_roster_ids is not None and c.get("owner_id") not in all_roster_ids:
+                # Ghost claim (v2.5): the owner is gone from the roster
+                # entirely — the claim is dead, not blocking, and must
+                # never brick a push. Warn (with the release command)
+                # instead of failing; the blocking checks below already
+                # exclude it via is_blocking(..., roster_ids=...).
+                if c.get("status") == "active":
+                    warnings.append(f"{task_id}: owner {c.get('owner_id')} is gone from the roster — "
+                                    "the claim is dead (not blocking); release it: "
+                                    f"python3 scripts/claim.py release --task {task_id} --by <you>")
+            else:
+                errors.append(f"{task_id}: owner {c.get('owner_id')} is not an active roster member")
         scope = c.get("scope") or {}
         stype = scope.get("type")
         if stype not in ("files", "artifact", "area"):
@@ -349,8 +413,15 @@ def cmd_check(claims_dir, roster_path, config_path):
             err = tc.path_syntax_error(f)
             if err:
                 errors.append(f"{task_id}: {err}")
+            # v2.5: the board cannot be claimed — a claim on team/
+            # only ever blocks other claims, never edits, so it is
+            # pure confusion (and a pre-v2.5 hand-written one must
+            # fail the gates, not slip through).
+            if f == "team" or str(f).startswith("team/"):
+                errors.append(f"{task_id}: claims may not cover team/ paths ({f!r}) — "
+                              "the board cannot be claimed; claim the work files, not the roster/ledger itself")
             low = tc.canonical_path(f)
-            if low in seen_lower and tc.is_blocking(c):
+            if low in seen_lower and tc.is_blocking(c, roster_ids=all_roster_ids):
                 other_id, other_claim = seen_lower[low]
                 # Worktree exemption (v2.3): two worktree claims on
                 # different worktrees may cover the same file.
@@ -365,9 +436,9 @@ def cmd_check(claims_dir, roster_path, config_path):
                         f"CONFLICT: file {f} claimed by both {other_id} and {task_id} — "
                         f"first by (created_seq, owner) is {first[1]} (created_seq {first[0].get('created_seq') or first[0].get('lamport')}), "
                         f"so {second[1]} must yield")
-            elif tc.is_blocking(c):
+            elif tc.is_blocking(c, roster_ids=all_roster_ids):
                 seen_lower[low] = (task_id, c)
-        if tc.is_blocking(c):
+        if tc.is_blocking(c, roster_ids=all_roster_ids):
             owner_active_count[c.get("owner_id")] = owner_active_count.get(c.get("owner_id"), 0) + 1
         if c.get("status") == "active" and tc.parse_time(c.get("expires_at") or ""):
             if tc.is_stealable(c, cfg=cfg):
@@ -388,7 +459,8 @@ def cmd_check(claims_dir, roster_path, config_path):
             errors.append(f"{owner}: {n} active claims exceeds max_claims_per_agent={cfg['max_claims_per_agent']}")
     # Prefix-overlap between blocking claims (exact-string check above
     # only catches identical lowercased paths).
-    blocking = [(t, c) for t, c in claims.items() if tc.is_blocking(c)]
+    blocking = [(t, c) for t, c in claims.items()
+                if tc.is_blocking(c, roster_ids=all_roster_ids)]
     for i in range(len(blocking)):
         for j in range(i + 1, len(blocking)):
             t1, c1 = blocking[i]
@@ -477,7 +549,8 @@ def cmd_check(claims_dir, roster_path, config_path):
         for e in errors:
             print(f"  - {e}")
         return 1
-    n_blocking = sum(1 for c in claims.values() if tc.is_blocking(c))
+    n_blocking = sum(1 for c in claims.values()
+                     if tc.is_blocking(c, roster_ids=all_roster_ids))
     print(f"CLAIM CHECK: OK — {len(claims)} claim(s), {n_blocking} blocking, no conflicts.")
     return 0
 
@@ -518,6 +591,14 @@ def cmd_claim(args):
         if err:
             print(f"CLAIM: FAIL — {err}")
             return 1
+    # v2.5: the board cannot be claimed — team/ state is the ledger
+    # itself, not work. (Covers fresh claims and renewals alike:
+    # this check runs before the renewal branch below.)
+    for f in files:
+        if f == "team" or str(f).startswith("team/"):
+            print(f"CLAIM: FAIL — {f!r} is under team/ — the board cannot be claimed; "
+                  "claim the work files, not the roster/ledger itself")
+            return 1
     if len(files) > cfg["max_files_per_claim"]:
         print(f"CLAIM: FAIL — {len(files)} files exceeds max_files_per_claim={cfg['max_files_per_claim']}")
         return 1
@@ -554,6 +635,7 @@ def cmd_claim(args):
         return 1
     roster_dir = args.roster or os.path.join(team_dir, "roster")
     active, _humans, rerr = load_roster_active(roster_dir)
+    all_ids, _aerr = load_roster_all_ids(roster_dir)
     if rerr:
         print(f"CLAIM: warning — {rerr}; owner not verified against the roster.")
     elif args.owner not in active:
@@ -589,7 +671,7 @@ def cmd_claim(args):
         renew_wt = worktree if args.worktree else (existing.get("worktree") or "")
         conflicts = check_conflicts(claims, files, exclude_task=args.task,
                                     new_claim={"worktree": renew_wt},
-                                    repo_root=repo_root)
+                                    repo_root=repo_root, roster_ids=all_ids)
         if conflicts:
             print("CLAIM: FAIL — someone else is already working on this:")
             for c, overlap in conflicts:
@@ -622,7 +704,7 @@ def cmd_claim(args):
               f"(max_claims_per_agent={cfg['max_claims_per_agent']})")
         return 1
     conflicts = check_conflicts(claims, files, new_claim={"worktree": worktree},
-                              repo_root=repo_root)
+                              repo_root=repo_root, roster_ids=all_ids)
     if conflicts:
         print("CLAIM: FAIL — someone else is already working on this:")
         for c, overlap in conflicts:

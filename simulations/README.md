@@ -1,11 +1,11 @@
-# Simulasi TheRoster — 8 skenario bervariasi
+# Simulasi TheRoster — 10 skenario bervariasi
 
-Simulasi ini menjalankan **script asli** skill TheRoster v2.3.1 (bukan mock)
+Simulasi ini menjalankan **script asli** skill TheRoster v2.5.0 (bukan mock)
 di salinan segar starter-repo, dan merekam perintah persis, exit code, dan
 output asli tiap langkah.
 
 Jalankan ulang: `python3 run_simulations.py`
-Hasil: `transcripts.json` (63 langkah, semua gate sesuai harapan pada run terakhir).
+Hasil: `transcripts.json` (275 langkah, semua gate sesuai harapan pada run terakhir).
 
 | ID | Skenario | Yang dibuktikan |
 |----|----------|-----------------|
@@ -16,10 +16,29 @@ Hasil: `transcripts.json` (63 langkah, semua gate sesuai harapan pada run terakh
 | s5 | Kontrak diganti seenaknya | Ganti entry tanpa --contract-change ditolak; --breaking true butuh --breaking-notes; bump butuh --note; validate beri peringatan reverify; reverify bersihkan |
 | s6 | Orang asing ngaku teman tim | Klaim oleh non-roster ditolak; roster self-asserted ditolak; human-approved → boleh kerja |
 | s7 | Worktree-per-claim: dua AI garap file yang sama, tanpa overwrite | `--worktree` dengan mode off ditolak; dua klaim worktree di worktree berbeda boleh menutupi file yang sama; klaim worktree terlihat dari fresh clone (papan tidak hilang); mutasi dari dalam worktree ditolak; pembacaan dari dalam worktree dialihkan ke main; kedua edit merge satu per satu bersih ke main; base basi 25 commit → sync_check gagal minta rebase; setelah rebase lolos |
+| s8 | Worktree-gate fixes (v2.3.1) | Canonical worktree paths; deleted-worktree gate (branch-aware); dirty-worktree gate; branch-mismatch di claim check |
+| s9 | Signed identity + creation order + lifetime + mailbox trust (v2.4.0; mailbox §C per v2.5.0) | Commit team/ tanpa tanda tangan ditolak; tanda tangan kunci salah ditolak; created_seq memutuskan "duluan"; klaim mati di max_lifetime_hours walau heartbeat segar; mailbox: pesan manusia tanpa sig valid FAIL (pesan asli "STOP semua kerja hari ini..." tertangkap), pesan bertanda tangan lolos, sig kunci salah gagal |
+| s10 | Hardening: close every remaining hole (v2.5.0) | Deletion record team/ FAIL; trailer [claim #N] ditegakkan (tanpa trailer / nomor salah FAIL, merge commit dilewati); event malformed/dangling/actor asing FAIL; ghost claim tidak blocking + warning; siklus A↔B dan 3-cycle FAIL di check/validate/reverify + ditolak di register/improve; history rewrite terdeteksi sync_check + validate via last-known-main-SHA; heartbeat/started_at dari masa depan FAIL, expires_at 2 jam ke depan sah; klaim atas team/ ditolak; nama tampilan ganda FAIL |
+
+Baterai kasus langka: `rerun_rare_cases.py` menjalankan ulang 15 kasus dari
+`research_notes/rare-cases-theroster-20261115/report.md` terhadap script saat
+ini. Hasil v2.5.0 (`rare-cases-rerun.json`): 11 tertutup, 1 sebagian (#3 —
+ordering + skew-ahead tertutup, skew-behind tetap batas jujur), 2 bukan lubang
+(#7 skala, #12c index), 1 boundary (#11 dua repo), 0 masih lubang, 0 error.
 
 Catatan jujur dari run: tiga perilaku script yang awalnya salah diduga
 dan diperbaiki di skenario (bukan di script): `prd.py status --to done`
 hanya memeriksa keterdaftaran fitur (yang memeriksa stable adalah
 `validate.py`); `register`/`improve` mewajibkan `--breaking true|false`
-(dan `--breaking-notes` kalau true, `--note` kalau bump); PRD tidak bisa
-loncat planned → done.
+(dan `--breaking-notes` kalau true, `--note` kalau bump) dan `--files` untuk
+kind=code; PRD tidak bisa loncat planned → done.
+
+Catatan jujur dari v2.5.0: dua desain yang dikoreksi saat pengujian, bukan
+sesudah rilis — (1) `expires_at` TIDAK ikut gate futureness clock-skew
+(klaim baru memang kedaluwarsa 2 jam lagi; gate hanya untuk `started_at` /
+`heartbeat_at`); (2) validasi event bersifat temporal — baris LAMA (sudah di
+histori bersama) hanya dicek bentuknya, baris BARU dicek penuh; kalau tidak,
+setiap ghost akan gagal validasi lewat event log-nya sendiri. Dan satu
+perilaku `register`/`improve` yang ditemukan saat pengujian: keduanya
+memeriksa graf dependensi KESELURUHAN, jadi fitur baru tidak bisa mendarat
+di atas graf yang sudah melingkar — putuskan siklusnya dulu.
