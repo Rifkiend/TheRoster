@@ -31,6 +31,11 @@ Checks:
    --write-tree` exists for the sync_check merge check (WARN if
    older — the check falls back to a trial merge), and
    scripts/worktree_setup.sh is present (WARN if missing).
+10. Signed identity (v2.4, only when team/config.json has
+    require_signatures=true): ssh-keygen present (WARN if missing —
+    git needs it to verify SSH signatures), and every active roster
+    member has a public_key (WARN if not — they cannot push team/
+    changes until a key is added via a human-approved roster change).
 
 Exit 0 = healthy. Exit 1 = something is wrong, with install
 instructions printed. Warnings do not fail the run.
@@ -194,6 +199,36 @@ def main():
                             "(git worktree add) until it is restored" % setup)
         else:
             print("doctor: worktree_setup.sh present OK")
+
+    # 10. Signed identity (v2.4, warn only): only when the team opted
+    # in (require_signatures=true). git shells out to ssh-keygen to
+    # verify SSH commit signatures; without it, verification fails.
+    # And a member without a public_key cannot push team/ changes
+    # while the knob is on — the key enters via a human-approved
+    # roster change, so warn early instead of failing at push time.
+    cfg_for_sig = None
+    if os.path.isfile(cfg_path):
+        cfg_for_sig, _err = tc.load_json_file(cfg_path)
+    if isinstance(cfg_for_sig, dict) and cfg_for_sig.get("require_signatures"):
+        print("doctor: require_signatures=true — checking signature support")
+        import shutil
+        if shutil.which("ssh-keygen") is None:
+            warnings.append("ssh-keygen not found — git needs it to verify SSH commit signatures; "
+                            "install OpenSSH client or turn require_signatures off")
+        else:
+            print("doctor: ssh-keygen present OK")
+        roster_dir = os.path.join(team_dir, "roster")
+        if os.path.isdir(roster_dir):
+            keyless = []
+            for _stem, (_p, rec) in tc.load_records(roster_dir).items():
+                if isinstance(rec, dict) and rec.get("status") == "active" and not rec.get("public_key"):
+                    keyless.append(rec.get("id") or _stem)
+            if keyless:
+                warnings.append("require_signatures is on but these active members have no public_key "
+                                "on the roster: %s — they cannot push team/ changes until a key is added "
+                                "(human-approved roster change)" % ", ".join(sorted(keyless)))
+            else:
+                print("doctor: every active roster member has a public_key OK")
 
     for w in warnings:
         print(f"doctor: warning — {w}")

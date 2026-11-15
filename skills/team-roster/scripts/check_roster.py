@@ -20,6 +20,12 @@ Rules (v2):
   FAIL — a human must approve roster entries (audit 3.1: the roster is
   the only identity in the system, and it is self-asserted unless a
   human approved it). added_by + added_in_pr record who/when.
+- public_key (v2.4, OPTIONAL): one SSH public key line for the member
+  (e.g. "ssh-ed25519 AAAAC3... user@laptop"). When present it must be
+  a valid SSH public key (type + base64 blob); a bad key FAILS. The
+  key is what signed identity (require_signatures in team/config.json)
+  verifies team/ commits against — without it, the member cannot
+  push team/ changes when signatures are required.
 - id grammar ^[a-z0-9][a-z0-9-]*$, max 64 chars, ASCII only
   (NFKC + casefold before comparison; non-ASCII rejected).
 - type in {human, ai-agent, tool}, status in {active, away, retired}.
@@ -143,6 +149,14 @@ def validate_member(m, label, errors, warnings, today, seen_ids):
     elif "last_seen_at" not in m:
         warnings.append(f"{label}: no last_seen_at — liveness unknown (warn only; "
                         "the roster is a directory, not a presence system)")
+    # v2.4: optional SSH public key (signed identity). Format only —
+    # it does not prove anyone holds the private key (that is the
+    # roster's human-approval step). A member without a key is valid
+    # until the team opts into require_signatures.
+    if "public_key" in m and m.get("public_key"):
+        if not tc.valid_public_key(m["public_key"]):
+            errors.append(f"{label}: public_key is not a valid SSH public key line "
+                          "(expected '<type> <base64> [comment]', e.g. ssh-ed25519 AAAAC3... user@laptop)")
 
 
 def main():

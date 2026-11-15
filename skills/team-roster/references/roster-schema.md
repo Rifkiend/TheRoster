@@ -25,6 +25,7 @@ The filename must match the `id` field inside it.
 | `added_in_pr` | yes | The PR number (e.g. `"#1"`) that added this member. |
 | `verification` | yes | `human-approved` — roster entries are only trusted when a human approved them. No other value is accepted. |
 | `lamport` | yes | Lamport counter for this record file. New record: `1`. Every later write: existing + 1. Ties in ordering break by agent id. |
+| `public_key` | no | One SSH public key line, e.g. `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@laptop`. Optional. When the team opts into `require_signatures` (`team/config.json`), commits touching `team/` that this member's records own must be signed by this key — without it, the member cannot push `team/` changes. Validated by `check_roster.py` (format only). The key enters or rotates only through a human-approved roster change. |
 | `last_seen_at` | no | UTC ISO-8601 ending in `Z`, e.g. `2026-11-14T10:00:00Z`. Updated by the claim heartbeat. Absence of a heartbeat for 1 hour = presumed offline. This is presence-by-poll, not real presence (see `conflict-prevention.md`). |
 
 ## Status meanings
@@ -77,6 +78,9 @@ human out of band.
     only a human (or a designated roster-owner agent) can approve —
     enforced by `.github/CODEOWNERS` + branch protection, not by the hook
     alone.
+12. `public_key`, when present, must be one valid SSH public key line
+    (known key type + base64 blob). It is optional — a member without a
+    key is valid until the team opts into `require_signatures`.
 
 ## Roster liveness
 
