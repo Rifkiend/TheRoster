@@ -68,6 +68,11 @@ Rules:
   claim still conflicts. Mutating team/ state from inside a linked
   worktree is refused — cd to the main checkout first. Reads from
   inside a worktree are redirected to the main checkout's team/.
+  v2.3.1: worktree paths compare canonically — `../wt-x` and its
+  absolute spelling are the same worktree, even before the directory
+  exists; `claim.py check` fails a blocking claim whose worktree is
+  gone but whose branch still exists here (deleted on this machine),
+  and fails a branch mismatch between claim and worktree.
 
 Exit 0 = ok. Exit 1 = conflict / invalid / unknown owner.
 Stdlib only, Python 3.9+.
@@ -120,7 +125,8 @@ def load_prd_item(team_dir, pid):
     return data if isinstance(data, dict) else None
 
 
-def check_conflicts(claims, files, exclude_task=None, new_claim=None):
+def check_conflicts(claims, files, exclude_task=None, new_claim=None,
+                     repo_root=None):
     """Returns [(claim, [overlapping files]), ...] against blocking claims,
     ordered by (lamport, owner_id) — the claim that claimed first comes
     first, so the caller can say who must yield.
@@ -129,14 +135,18 @@ def check_conflicts(claims, files, exclude_task=None, new_claim=None):
     with a blocking worktree claim on a DIFFERENT worktree — the two
     agents edit isolated checkouts, so there is nothing to overwrite.
     Any pair involving a shared-checkout claim still conflicts, and
-    two claims naming the SAME worktree path conflict too."""
+    two claims naming the SAME worktree path conflict too. Worktree
+    paths are compared canonically (v2.3.1): `../wt-x` and its
+    absolute spelling are the same worktree, so `repo_root` (the main
+    checkout root) must be passed for relative paths to resolve
+    against the right base."""
     conflicts = []
     for task_id, c in sorted(claims.items(), key=lambda kv: tc.claim_order_key(kv[1])):
         if exclude_task and task_id == exclude_task:
             continue
         if not tc.is_blocking(c):
             continue
-        if new_claim is not None and not tc.claims_share_checkout(new_claim, c):
+        if new_claim is not None and not tc.claims_share_checkout(new_claim, c, repo_root):
             continue
         overlap = sorted({f for f in files for g in (c.get("files") or [])
                           if tc.paths_overlap(f, g)})
@@ -254,6 +264,12 @@ def cmd_check(claims_dir, roster_path, config_path):
     cfg = tc.load_config(team_dir if not config_path else os.path.dirname(config_path) or ".")
     if config_path and os.path.isfile(config_path):
         cfg = tc.load_config(os.path.dirname(config_path) or ".")
+    # Main checkout root: relative worktree paths are recorded against
+    # it, so it is the base for every canonical path comparison below.
+    # (When run from inside a linked worktree, git_root() is the
+    # worktree — main_checkout_path() recovers the main checkout.)
+    root = tc.git_root()
+    main_root = (tc.main_checkout_path(root) or root) if root else None
     errors, warnings = [], []
     claims = load_claims(claims_dir)
     roster_ids = None
@@ -327,7 +343,7 @@ def cmd_check(claims_dir, roster_path, config_path):
                 other_id, other_claim = seen_lower[low]
                 # Worktree exemption (v2.3): two worktree claims on
                 # different worktrees may cover the same file.
-                if other_id != task_id and tc.claims_share_checkout(c, other_claim):
+                if other_id != task_id and tc.claims_share_checkout(c, other_claim, main_root):
                     # "First" is decided by (lamport, owner_id), never
                     # by wall-clock — a skewed clock can be minutes in
                     # the future. The later claim must yield.
@@ -358,7 +374,7 @@ def cmd_check(claims_dir, roster_path, config_path):
             t2, c2 = blocking[j]
             # Worktree exemption (v2.3): different worktrees never share
             # a checkout, so prefix overlap between them is not a conflict.
-            if not tc.claims_share_checkout(c1, c2):
+            if not tc.claims_share_checkout(c1, c2, main_root):
                 continue
             for f in c1.get("files") or []:
                 for g in c2.get("files") or []:
@@ -375,7 +391,9 @@ def cmd_check(claims_dir, roster_path, config_path):
         wt = c.get("worktree") or ""
         br = c.get("branch") or ""
         if wt:
-            key = os.path.normpath(wt)
+            # Canonical key (v2.3.1): `../wt-x` and its absolute
+            # spelling are the same worktree.
+            key = tc.canonical_worktree_path(wt, main_root)
             if key in seen_wt_path:
                 errors.append(f"CONFLICT: worktree path {wt} is claimed by both {seen_wt_path[key]} and {t} — one worktree per claim")
             else:
@@ -385,15 +403,34 @@ def cmd_check(claims_dir, roster_path, config_path):
                 errors.append(f"CONFLICT: branch {br} is claimed by both {seen_wt_branch[br]} and {t} — one branch per worktree claim")
             else:
                 seen_wt_branch[br] = t
-    # A worktree claim's base_commit must be a commit this repo knows.
+    # A worktree claim's base_commit must be a commit this repo knows,
+    # its worktree must be present or accounted for, and its branch
+    # must match the worktree on disk (v2.3.1: E2 + E8b).
     root = tc.git_root()
     if root:
+        main_root = tc.main_checkout_path(root) or root
         for t, c in blocking:
-            if (c.get("worktree") or "") and c.get("base_commit"):
+            wt = c.get("worktree") or ""
+            br = c.get("branch") or ""
+            if wt and c.get("base_commit"):
                 r = tc.run_git(["cat-file", "-e", c["base_commit"] + "^{commit}"], cwd=root)
                 if r.returncode != 0:
                     errors.append(f"{t}: worktree claim base_commit {c['base_commit']} is unknown to this "
                                   "repo — rebase the worktree onto a known base and re-claim")
+            if not wt:
+                continue
+            presence = tc.worktree_presence(main_root, wt, br)
+            if presence == "deleted-here":
+                errors.append(f"{t}: worktree {wt} is gone but branch {br} still exists here — "
+                              "the worktree was removed; release the claim or recreate the worktree")
+            elif presence == "absent":
+                warnings.append(f"{t}: worktree {wt} is not present on this machine — the claim "
+                                "may live on a teammate's laptop; if it was deleted, release the claim")
+            elif presence == "present":
+                entry = tc.worktree_entry_for_path(main_root, wt)
+                if entry is not None and (entry.get("branch") or "") != br:
+                    errors.append(f"{t}: worktree at {wt} is on branch {entry.get('branch')}, but the claim "
+                                  f"says {br} — fix the claim or the worktree")
     # Branch freshness of the checked-out branch: warn past the
     # threshold, FAIL past 2x, until rebase + re-search.
     root = tc.git_root()
@@ -515,7 +552,8 @@ def cmd_claim(args):
         # given, else the claim's existing worktree (if any).
         renew_wt = worktree if args.worktree else (existing.get("worktree") or "")
         conflicts = check_conflicts(claims, files, exclude_task=args.task,
-                                    new_claim={"worktree": renew_wt})
+                                    new_claim={"worktree": renew_wt},
+                                    repo_root=repo_root)
         if conflicts:
             print("CLAIM: FAIL — someone else is already working on this:")
             for c, overlap in conflicts:
@@ -547,7 +585,8 @@ def cmd_claim(args):
         print(f"CLAIM: FAIL — {args.owner} already has {active_count} active claims "
               f"(max_claims_per_agent={cfg['max_claims_per_agent']})")
         return 1
-    conflicts = check_conflicts(claims, files, new_claim={"worktree": worktree})
+    conflicts = check_conflicts(claims, files, new_claim={"worktree": worktree},
+                              repo_root=repo_root)
     if conflicts:
         print("CLAIM: FAIL — someone else is already working on this:")
         for c, overlap in conflicts:

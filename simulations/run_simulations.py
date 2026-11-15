@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simulasi bervariasi TheRoster — 7 skenario, pakai script ASLI skill (bukan mock).
+"""Simulasi bervariasi TheRoster — 8 skenario, pakai script ASLI skill (bukan mock).
 
 Setiap skenario jalan di salinan segar starter-repo, merekam perintah persis,
 exit code, dan output asli tiap langkah. Hasil: transcripts.json (+ README.md).
@@ -539,6 +539,16 @@ def s7():
           "assert 'Bob: docstring ini juga menjelaskan format token' in t, 'edit Bob hilang'; "
           "print('main berisi edit Alice + edit Bob')"],
          main, "pass")
+    # v2.3.1: a merged claim must be released BEFORE its worktree is
+    # removed — an active claim whose worktree is gone fails
+    # validation (E2 rule). Merge -> release -> remove, in that order.
+    step(scn, "[main] Release klaim t-201 setelah merge",
+         ["python3", str(SCRIPTS / "claim.py"), "release", "--task", "t-201", "--by", "assistant"],
+         main, "pass",
+         "Klaim yang sudah merge bukan lagi janji aktif — dilepas sebelum worktree-nya dihapus.")
+    step(scn, "[main] Release klaim t-202 setelah merge",
+         ["python3", str(SCRIPTS / "claim.py"), "release", "--task", "t-202", "--by", "teammate-1"],
+         main, "pass")
     git(["worktree", "remove", "--force", str(wt_alice)], main)
     git(["worktree", "remove", "--force", str(wt_bob)], main)
 
@@ -566,7 +576,183 @@ def s7():
     git(["rebase", "-q", "origin/main"], wt_carol)
     step(scn, "[main] Setelah rebase: sync_check --claim t-203 LOLOS",
          sync + ["--claim", "t-203"], main, "pass")
+    step(scn, "[main] Release klaim t-203 (v2.3.1: lepas dulu sebelum hapus worktree)",
+         ["python3", str(SCRIPTS / "claim.py"), "release", "--task", "t-203", "--by", "owner"],
+         main, "pass")
     git(["worktree", "remove", "--force", str(wt_carol)], main)
+    validate_end(scn, main)
+    return scn
+
+
+def s8():
+    """v2.3.1 regression: the extreme-case defects, re-run against the
+    FIXED scripts. Each sub-case reproduces exactly the v2.3.0
+    failure from simulations/v2.3.0-extreme-cases.md and must now
+    behave correctly (fail where it should fail)."""
+    base = WORK / "s8-worktree-gates"
+    if base.exists():
+        shutil.rmtree(base)
+    base.mkdir(parents=True)
+    git(["init", "--bare", "-b", "main", "remote.git"], base)
+    git(["clone", "-q", "remote.git", "work-main"], base)
+    main = base / "work-main"
+    git(["config", "user.email", "sim@theroster.test"], main)
+    git(["config", "user.name", "Sim"], main)
+    shutil.copytree(STARTER, main, dirs_exist_ok=True)
+    cfg_path = main / "team" / "config.json"
+    cfg = json.loads(cfg_path.read_text())
+    cfg["worktree_mode"] = "per-claim"
+    cfg_path.write_text(json.dumps(cfg, indent=2, sort_keys=True))
+    git(["add", "-A"], main)
+    git(["commit", "-q", "-m", "starter + worktree_mode per-claim"], main)
+    git(["push", "-q", "origin", "main"], main)
+    scn = {"id": "s8", "title": "Worktree gates (v2.3.1): alias path, deleted worktree, dirty worktree, branch mismatch",
+           "team": "Tim bangun website (2 AI + owner)",
+           "story": "Ronde kasus ekstrem v2.3.0 menemukan satu cacat dan dua "
+                    "gap di gerbang worktree: worktree yang sama dieja dua "
+                    "cara lolos, worktree yang dihapus tidak digagalkan gate "
+                    "mana pun, dan worktree kotor lolos sync_check dengan "
+                    "pesan 'Safe to push'. Skenario ini mereproduksi ketiganya "
+                    "(plus asimetri claim check) terhadap script yang sudah "
+                    "diperbaiki — semuanya harus berperilaku benar.",
+           "tanpa_roster": "Dua agent mendarat di worktree yang sama tanpa "
+                           "sadar (satu pakai path relatif, satu absolut), "
+                           "klaim atas worktree yang sudah dihapus lolos "
+                           "semua gate, dan agen mem-push cabang yang "
+                           "pekerjaannya belum di-commit.",
+           "steps": []}
+    claim = ["python3", str(SCRIPTS / "claim.py"), "claim",
+             "--claims-dir", "team/claims", "--roster", "team/roster",
+             "--config", "team/config.json"]
+    sync = ["python3", str(SCRIPTS / "sync_check.py"), "team/features", "team/claims",
+            "--remote", "origin", "--branch", "main"]
+    check = ["python3", str(SCRIPTS / "claim.py"), "check",
+             "team/claims", "--roster", "team/roster"]
+    validate = ["python3", str(SCRIPTS / "validate.py"), "team"]
+
+    def push_claim(task_id, seq):
+        git(["add", "team/claims/%s.json" % task_id], main)
+        git(["commit", "-q", "-m", "claim: %s [claim #%d]" % (task_id, seq)], main)
+        git(["push", "-q", "origin", "main"], main)
+
+    # --- E3c: same worktree, two spellings — second claim must FAIL ---
+    step(scn, "[main] E3c: klaim t-801 --worktree ../wt-alias (belum dibuat)",
+         claim + ["--task", "t-801", "--title", "Uji alias path",
+                  "--owner", "assistant", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-alias"], main, "pass",
+         "Klaim pertama diterima; worktree belum dibuat (jendela klaim-dulu-baru-setup).")
+    push_claim("t-801", 2)
+    step(scn, "[main] E3c: klaim t-802 --worktree <absolut>/wt-alias HARUS DITOLAK",
+         claim + ["--task", "t-802", "--title", "Uji alias path",
+                  "--owner", "teammate-1", "--files", "tests/test_login.py",
+                  "--worktree", str(base / "wt-alias")], main, "fail",
+         "v2.3.0: DITERIMA (cacat — string mentah dibandingkan). v2.3.1: path dikanonikalisasi, jadi ini worktree yang sama.")
+    step(scn, "[main] E3c: claim.py check — tidak ada konflik tercatat",
+         check, main, "pass",
+         "Klaim kedua tidak pernah tercatat, jadi check lolos (peringatan worktree t-801 yang belum dibuat boleh muncul).")
+    step(scn, "[main] E3c: validate.py — tidak ada konflik tercatat",
+         validate, main, "pass",
+         "Sama: tidak ada dua klaim di worktree yang sama di file.")
+
+    # --- E2: worktree deleted while the claim is active — all gates FAIL ---
+    step(scn, "[main] E2: klaim t-803 --worktree ../wt-del",
+         claim + ["--task", "t-803", "--title", "Uji worktree dihapus",
+                  "--owner", "assistant", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-del"], main, "pass")
+    push_claim("t-803", 3)
+    base_c = json.loads((main / "team" / "claims" / "t-803.json").read_text())["base_commit"]
+    wt_del = base / "wt-del"
+    step(scn, "[main] E2: worktree_setup.sh membuat worktree",
+         ["bash", str(SCRIPTS / "worktree_setup.sh"),
+          "../wt-del", "wt/t-803", base_c], main, "pass")
+    git(["worktree", "remove", "--force", str(wt_del)], main)
+    step(scn, "[main] E2: validate.py HARUS GAGAL — worktree hilang, branch masih ada",
+         validate, main, "fail",
+         "v2.3.0: exit 0, peringatan saja. v2.3.1: branch wt/t-803 masih ada di sini, jadi worktree-nya dihapus di mesin ini — gagal.")
+    step(scn, "[main] E2: claim.py check HARUS GAGAL",
+         check, main, "fail",
+         "v2.3.0: exit 0, tidak ada yang menangkap. v2.3.1: gagal dengan pesan yang sama.")
+    step(scn, "[main] E2: sync_check --claim t-803 HARUS GAGAL",
+         sync + ["--claim", "t-803"], main, "fail",
+         "v2.3.0: exit 0, skip+note. v2.3.1: gagal — lepas klaimnya atau buat ulang worktree-nya.")
+    step(scn, "[main] E2: release t-803 (klaim dilepas — bukan lagi janji aktif)",
+         ["python3", str(SCRIPTS / "claim.py"), "release", "--task", "t-803", "--by", "assistant"],
+         main, "pass",
+         "Supaya validasi akhir tidak gagal karena klaim ini.")
+
+    # --- E7 preserved: worktree never set up anywhere — warn only ---
+    step(scn, "[main] E7: klaim t-804 --worktree ../wt-remote (tidak pernah dibuat)",
+         claim + ["--task", "t-804", "--title", "Uji lintas-mesin",
+                  "--owner", "assistant", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-remote"], main, "pass")
+    push_claim("t-804", 4)
+    step(scn, "[main] E7: validate.py LOLOS (peringatan saja) — branch tidak ada di sini",
+         validate, main, "pass",
+         "Worktree + branch sama-sama tidak ada di mesin ini: bisa jadi di laptop teman — tetap skip+note, bukan gagal.")
+    step(scn, "[main] E7: sync_check --claim t-804 LOLOS (note saja)",
+         sync + ["--claim", "t-804"], main, "pass",
+         "Merge check diserahkan ke PR, sesuai desain v2.3.")
+
+    # --- E5: dirty worktree — sync_check must FAIL until committed ---
+    step(scn, "[main] E5: klaim t-805 --worktree ../wt-dirty",
+         claim + ["--task", "t-805", "--title", "Uji worktree kotor",
+                  "--owner", "assistant", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-dirty"], main, "pass")
+    push_claim("t-805", 5)
+    base_e = json.loads((main / "team" / "claims" / "t-805.json").read_text())["base_commit"]
+    wt_dirty = base / "wt-dirty"
+    step(scn, "[main] E5: worktree_setup.sh membuat worktree",
+         ["bash", str(SCRIPTS / "worktree_setup.sh"),
+          "../wt-dirty", "wt/t-805", base_e], main, "pass")
+    dirty_test = (wt_dirty / "tests" / "test_login.py").read_text()
+    file_action(scn, "[wt-dirty] Edit file TANPA commit (worktree kotor)",
+                "tests/test_login.py",
+                dirty_test + '\n# t-805: edit belum di-commit\n',
+                wt_dirty)
+    step(scn, "[main] E5: sync_check --claim t-805 HARUS GAGAL — ada perubahan belum di-commit",
+         sync + ["--claim", "t-805"], main, "fail",
+         "v2.3.0: exit 0 + 'Safe to push' padahal kerja belum ada di branch. v2.3.1: gagal, 'commit dulu'.")
+    git(["add", "-A"], wt_dirty)
+    git(["commit", "-q", "-m", "t-805: edit tes [claim #5]"], wt_dirty)
+    step(scn, "[main] E5: setelah commit, sync_check --claim t-805 LOLOS",
+         sync + ["--claim", "t-805"], main, "pass")
+
+    # --- E8b: branch mismatch — claim.py check must now catch it ---
+    step(scn, "[main] E8b: klaim t-806 --worktree ../wt-mm",
+         claim + ["--task", "t-806", "--title", "Uji branch mismatch",
+                  "--owner", "teammate-1", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-mm"], main, "pass")
+    push_claim("t-806", 6)
+    base_f = json.loads((main / "team" / "claims" / "t-806.json").read_text())["base_commit"]
+    wt_mm = base / "wt-mm"
+    step(scn, "[main] E8b: worktree_setup.sh membuat worktree",
+         ["bash", str(SCRIPTS / "worktree_setup.sh"),
+          "../wt-mm", "wt/t-806", base_f], main, "pass")
+    step(scn, "[main] E8b: edit klaim — branch diganti manual jadi 'main'",
+         ["python3", "-c",
+          "import json; p = 'team/claims/t-806.json'; c = json.load(open(p)); "
+          "c['branch'] = 'main'; json.dump(c, open(p, 'w'), indent=2, sort_keys=True); "
+          "print('branch diganti manual (simulasi klaim yang menunjuk ke branch lain)')"],
+         main, "pass",
+         "Aksi pengrusakan file klaim (bukan script) — seperti ronde ekstrem E8.")
+    step(scn, "[main] E8b: claim.py check HARUS GAGAL — branch mismatch",
+         check, main, "fail",
+         "v2.3.0: exit 0 (tidak menangkap). v2.3.1: gagal — worktree di wt/t-806, klaim bilang main.")
+    step(scn, "[main] E8b: sync_check --claim t-806 HARUS GAGAL",
+         sync + ["--claim", "t-806"], main, "fail",
+         "Sudah gagal di v2.3.0 juga — regresi, jangan sampai rusak.")
+    step(scn, "[main] E8b: validate.py HARUS GAGAL",
+         validate, main, "fail",
+         "Sudah gagal di v2.3.0 juga — regresi, jangan sampai rusak.")
+    step(scn, "[main] E8b: kembalikan branch klaim ke wt/t-806",
+         ["python3", "-c",
+          "import json; p = 'team/claims/t-806.json'; c = json.load(open(p)); "
+          "c['branch'] = 'wt/t-806'; json.dump(c, open(p, 'w'), indent=2, sort_keys=True); "
+          "print('branch dikembalikan')"],
+         main, "pass")
+    step(scn, "[main] E8b: claim.py check LOLOS lagi setelah diperbaiki",
+         check, main, "pass",
+         "Membuktikan gagalnya tadi memang karena mismatch, bukan karena klaimnya.")
     validate_end(scn, main)
     return scn
 
@@ -574,11 +760,11 @@ def s7():
 def main():
     WORK.mkdir(exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
-    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7()]
+    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7(), s8()]
     total_steps = sum(len(s["steps"]) for s in scenarios)
     gates_ok = sum(1 for s in scenarios for st in s["steps"] if st.get("gate_ok"))
     doc = {
-        "generated_by": "run_simulations.py — script ASLI TheRoster v2.3.0",
+        "generated_by": "run_simulations.py — script ASLI TheRoster v2.3.1",
         "repo": "Rifkiend/TheRoster",
         "scenarios": scenarios,
         "summary": {"scenarios": len(scenarios), "steps": total_steps,

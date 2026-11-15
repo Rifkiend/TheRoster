@@ -6,7 +6,7 @@
 
 ### One team. Every AI. Zero guesswork.
 
-[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.3.0-blue)](https://agentskills.io)
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.3.1-blue)](https://agentskills.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-yellow.svg)](#install)
 [![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#description)
@@ -30,6 +30,7 @@ It works for any job, not just code: a website-build team, a software team, an o
 
 | Version | What it added |
 |---|---|
+| **v2.3.1** | Worktree-gate fixes (patch) — worktree paths compare canonically (`../wt-x` and its absolute spelling are the same worktree); a blocking claim whose worktree is gone but whose branch still exists here FAILS in `validate.py`, `claim.py check`, and `sync_check` (deleted on this machine — release or recreate); `sync_check` FAILS on a worktree with uncommitted changes; `claim.py check` now catches branch mismatches. Cross-machine claims (worktree + branch absent here) still only warn. See `docs/v2.3-design.md` (v2.3.1 patch note) and `simulations/v2.3.1-evidence.md`. |
 | **v2.3** | Worktree-per-claim mode (opt-in, `worktree_mode: "per-claim"`) — two agents edit the *same file* at once in isolated worktrees and merge one by one; the claim is still pushed alone to `main` first, `team/` reads come from the main checkout, `sync_check` becomes a merge check. See `docs/v2.3-design.md`. |
 | **v2.2** | PRD layer (`team/prd/`, `prd.py`) — every task traces back to a decided item; feature cancellation (releases overlapping claims, `sync_check` stops stale workers); contract markers + dependencies (`--contract`, `--depends-on`, `--contract-change`, `strict_deps` knob). Every new power has a named failure mode + mitigation + knob — see `docs/v2.2-design.md`. |
 | **v2.1** | Event-log rotation — `archive_events.py` moves past months to `team/events-archive/`; hot log stays one month. Broader examples (website-build team first); emoji-free README. |
@@ -166,7 +167,7 @@ Honest limits, stated plainly. v2 narrows every one of these; none of them is cl
 
 ```
 skills/team-roster/
-├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.3.0)
+├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.3.1)
 ├── examples/
 │   └── starter-repo/       # copyable starter repo (v2 layout) — `cp -r examples/starter-repo/* .`
 │       ├── team/           # config.json, roster/, claims/, features/, prd/, events.jsonl, mailbox/,

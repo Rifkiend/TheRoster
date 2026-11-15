@@ -1,6 +1,6 @@
-# Simulasi TheRoster — 7 skenario bervariasi
+# Simulasi TheRoster — 8 skenario bervariasi
 
-Simulasi ini menjalankan **script asli** skill TheRoster v2.3.0 (bukan mock)
+Simulasi ini menjalankan **script asli** skill TheRoster v2.3.1 (bukan mock)
 di salinan segar starter-repo, dan merekam perintah persis, exit code, dan
 output asli tiap langkah.
 

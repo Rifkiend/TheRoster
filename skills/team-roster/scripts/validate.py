@@ -29,13 +29,16 @@ Checks:
   warns "needs reverify" — or FAILS with strict_deps=true.
 - branch freshness of the checked-out branch: warn past the
   threshold, FAIL past 2x (config branch_freshness_commits/days).
-- worktree-per-claim consistency (v2.3): a blocking worktree claim
-  must name a branch and a base_commit the repo knows, and two
-  blocking worktree claims must not share a worktree path or a
-  branch. Two worktree claims on DIFFERENT worktrees may cover the
-  same file (the merge check, not the claim check, decides whether
-  they land cleanly). A worktree absent on THIS machine only warns —
-  the claim may live on a teammate's laptop.
+- worktree-per-claim consistency (v2.3, gates hardened in v2.3.1):
+  a blocking worktree claim must name a branch and a base_commit the
+  repo knows, and two blocking worktree claims must not share a
+  worktree path or a branch — paths compare canonically, so `../wt-x`
+  and its absolute spelling are the same worktree. Two worktree
+  claims on DIFFERENT worktrees may cover the same file (the merge
+  check, not the claim check, decides whether they land cleanly). A
+  worktree absent on THIS machine only warns — the claim may live on
+  a teammate's laptop — EXCEPT when its branch still exists here:
+  then the worktree was deleted on this machine, and that FAILS.
 - ownership of team/ records, in the push range
   (git log <canonical_remote>/<canonical_branch>..HEAD, falling back
   to HEAD if no remote): all changed records must share one
@@ -154,6 +157,10 @@ def main():
     cfg = tc.load_config(team_dir)
     errors, warnings = [], []
     roster, claims, features, prd = load_all(team_dir)
+    # Main checkout root: relative worktree paths are recorded against
+    # it, so it is the base for every canonical path comparison.
+    root = tc.git_root()
+    main_root = (tc.main_checkout_path(root) or root) if root else None
     active_ids = {rid for rid, m in roster.items() if m.get("status") == "active"}
     all_ids = set(roster)
 
@@ -208,10 +215,11 @@ def main():
             continue
         ordered = sorted(holders, key=lambda h: tc.claim_order_key(h[1]))
         # Worktree exemption (v2.3): holders on different worktrees do
-        # not conflict — only pairs sharing a checkout do.
+        # not conflict — only pairs sharing a checkout do. Paths are
+        # compared canonically (v2.3.1).
         pairs = [(a, b) for i, a in enumerate(ordered)
                  for b in ordered[i + 1:]
-                 if tc.claims_share_checkout(a[1], b[1])]
+                 if tc.claims_share_checkout(a[1], b[1], main_root)]
         if not pairs:
             continue
         first = min((a for a, _b in pairs),
@@ -227,7 +235,7 @@ def main():
             t2, c2 = blocking_claims[j]
             # Worktree exemption (v2.3): different worktrees never share
             # a checkout, so prefix overlap between them is not a conflict.
-            if not tc.claims_share_checkout(c1, c2):
+            if not tc.claims_share_checkout(c1, c2, main_root):
                 continue
             for f in c1.get("files") or []:
                 for g in c2.get("files") or []:
@@ -240,9 +248,13 @@ def main():
                                       f"so {second[1]} must yield")
     # ---- worktree-per-claim consistency (v2.3) ----------------------
     # Only blocking claims are checked: a released/done claim's
-    # worktree fields are history, not a live promise.
+    # worktree fields are history, not a live promise. (A claim that
+    # is done/released and whose worktree is gone is the NORMAL
+    # lifecycle — merged, then removed — so non-blocking claims are
+    # not warned here at all.)
     seen_wt_path, seen_wt_branch = {}, {}
     root = tc.git_root()
+    main_root = (tc.main_checkout_path(root) or root) if root else None
     for tid, c in blocking_claims:
         wt = c.get("worktree") or ""
         br = c.get("branch") or ""
@@ -257,7 +269,9 @@ def main():
             errors.append(f"{label}: branch {br!r} is not a legal git branch name")
         if not c.get("base_commit"):
             errors.append(f"{label}: worktree claim without a base_commit — re-claim so the base is recorded")
-        key = os.path.normpath(wt)
+        # Canonical key (v2.3.1): `../wt-x` and its absolute spelling
+        # are the same worktree.
+        key = tc.canonical_worktree_path(wt, main_root)
         if key in seen_wt_path:
             errors.append(f"CONFLICT: worktree path {wt} is claimed by both {seen_wt_path[key]} and {tid} — one worktree per claim")
         else:
@@ -272,13 +286,29 @@ def main():
             if r.returncode != 0:
                 errors.append(f"{label}: worktree base_commit {c['base_commit']} is unknown to this repo")
         if root:
-            abs_wt = wt if os.path.isabs(wt) else os.path.normpath(os.path.join(root, wt))
-            entry = tc.worktree_entry_for_path(root, abs_wt)
-            if entry is None and not os.path.isdir(abs_wt):
-                warnings.append(f"{label}: worktree {wt} is not present on this machine — the claim "
-                                "may live on a teammate's laptop; if it was deleted, release the claim")
-            elif entry is not None and (entry.get("branch") or "") != br:
-                errors.append(f"{label}: worktree at {wt} is on branch {entry.get('branch')}, but the claim says {br}")
+            # Presence (v2.3.1, E2): a blocking claim whose worktree is
+            # gone but whose branch still exists HERE was deleted on
+            # this machine — FAIL. A worktree absent entirely may live
+            # on a teammate's laptop — warn only. A directory that
+            # exists but is not a registered worktree is also a
+            # warning: something removed the git metadata, or the
+            # directory was never a worktree.
+            presence = tc.worktree_presence(main_root, wt, br)
+            if presence == "deleted-here":
+                errors.append(f"{label}: worktree {wt} is gone but branch {br} still exists here — "
+                              "the worktree was removed; release the claim or recreate the worktree")
+            elif presence == "absent":
+                abs_wt = tc.canonical_worktree_path(wt, main_root)
+                if not os.path.isdir(abs_wt):
+                    warnings.append(f"{label}: worktree {wt} is not present on this machine — the claim "
+                                    "may live on a teammate's laptop; if it was deleted, release the claim")
+                else:
+                    warnings.append(f"{label}: worktree {wt} is not a registered worktree on this machine — "
+                                    "the directory exists but git does not list it; if it was removed, release the claim")
+            elif presence == "present":
+                entry = tc.worktree_entry_for_path(main_root, wt)
+                if entry is not None and (entry.get("branch") or "") != br:
+                    errors.append(f"{label}: worktree at {wt} is on branch {entry.get('branch')}, but the claim says {br}")
     for fid, f in sorted(features.items()):
         label = "feature %s" % fid
         if f.get("owner_id") not in active_ids:

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, scripts/archive_events.py, scripts/prd.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state (git >= 2.38 for the v2.3 worktree merge check). Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 2.3.0
+  version: 2.3.1
   tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place, sync-check, worktree
 ---
 
@@ -17,6 +17,7 @@ metadata:
 > **v2.2.0** adds the PRD layer (`team/prd/`), feature cancellation, and contract markers + dependencies. All new fields are optional: old records are read as contract=false with no dependencies, and a team without `team/prd/` rebuilds with an empty prd list. `team/config.json` gains two knobs, both default off: `prd_required` and `strict_deps`.
 
 > **v2.3.0** adds opt-in worktree-per-claim mode (`worktree_mode: "per-claim"` in `team/config.json`, default off): a claim can name its own git worktree + branch, so two agents can edit the *same file* at the same time in isolated checkouts and merge one by one. The claim itself is STILL pushed alone to `main` first, all `team/` reads come from the main checkout, and `sync_check` becomes a merge check. See "Worktree-per-claim mode (v2.3, opt-in)" below.
+> **v2.3.1** hardens the worktree gates: worktree paths compare canonically (`../wt-x` and its absolute spelling are the same worktree, even before the directory exists); a blocking claim whose worktree is gone but whose branch still exists here FAILS validation (deleted on this machine — release the claim or recreate the worktree); `sync_check` FAILS on a worktree with uncommitted changes; `claim.py check` now catches branch mismatches. A worktree + branch both absent here still only warns — it may live on a teammate's machine.
 
 ## The idea in one sentence
 
@@ -238,12 +239,12 @@ Rules:
 - **All `team/` reads come from the main checkout or `origin` — never from inside a worktree.** The scripts redirect reads to the main checkout automatically (with a note) and REFUSE any mutation from inside a linked worktree — `claim.py`, `features.py`, `prd.py` all fail with "cd to the main checkout first". If you are standing in a worktree and need to claim, heartbeat, register, or cancel — `cd` to the main checkout first.
 - **Same file, different worktrees: allowed.** Two worktree claims may cover the same file only when their worktree paths differ. The merge check, not the claim check, decides whether the two edits land cleanly — merge them one by one.
 - **Same file, mixed modes: refused.** A worktree claim overlapping a shared-checkout claim (or vice versa) is a conflict. The shared-checkout agent's files live on the main disk; letting a worktree branch from under it reintroduces the race the claim system exists to prevent.
-- **Same worktree path, two claims: refused.** Two claims naming the same worktree share a checkout, so the normal overlap rule applies.
+- **Same worktree path, two claims: refused.** Two claims naming the same worktree share a checkout, so the normal overlap rule applies. Paths compare canonically (v2.3.1): `../wt-x` and its absolute spelling are the same worktree — even before the directory exists (the claim-before-setup window). Spelling a path differently does not make it a different worktree.
 - **The worktree path must be outside the repo** and the branch must not exist yet — a worktree claim creates a fresh branch (`wt/<task-id>` by default when `--branch` is not given). Resuming work in an existing worktree is out of scope for v2.3 — open a new claim.
 - **Stale means rebase.** More than `branch_freshness_commits` (20) behind `origin/main` → `sync_check` fails with "rebase first". A `base_commit` the repo has never seen FAILS validation — re-claim from a known base.
-- **Merge mode replaces the overlap check.** In worktree mode `sync_check` verifies: the worktree exists on this machine, its branch matches the claim, its base is known, it is not stale, and it merges cleanly onto `origin/main` (`git merge-tree --write-tree`, git ≥ 2.38; older git falls back to a trial merge). A worktree that lives on another machine is skipped with a note — the merge is then the PR's job, not the script's.
+- **Merge mode replaces the overlap check.** In worktree mode `sync_check` verifies: the worktree exists on this machine, its branch matches the claim, its base is known, it is not stale, and it merges cleanly onto `origin/main` (`git merge-tree --write-tree`, git ≥ 2.38; older git falls back to a trial merge). A worktree that lives on another machine is skipped with a note — the merge is then the PR's job, not the script's. v2.3.1: a worktree that is gone but whose branch still exists here FAILS (it was deleted on this machine — release the claim or recreate the worktree), and a worktree with uncommitted changes FAILS ("commit them first" — the merge check only sees commits, so "Safe to push" must never print while work is still uncommitted). A branch mismatch between claim and worktree FAILS in `claim.py check` too, not just in `sync_check` and `validate.py`.
 - **Shared paths:** a fresh worktree is an empty room — no `node_modules`, no `.env`, no cache. `worktree_setup.sh` symlinks `worktree_shared_dirs` (default `node_modules`, `.cache`) from the main checkout, but only when the dir exists there AND is gitignored — a tracked dir is never symlinked. It copies `worktree_copy_files` (default `.env`, `.env.local`) — **never symlinked**: a symlink would make the worktree's env edits land on the main checkout's secrets file.
-- **Remove the worktree after the merge.** A merged worktree left behind is the next orphaned-branch incident in miniature. `git worktree remove <path>` (or `--force` after confirming the branch is merged — never `--force` on unmerged work).
+- **Remove the worktree after the merge.** A merged worktree left behind is the next orphaned-branch incident in miniature. `git worktree remove <path>` (or `--force` after confirming the branch is merged — never `--force` on unmerged work). Release (or mark done) the claim FIRST — an active claim whose worktree is already gone fails validation (v2.3.1): merge → release → remove, in that order.
 - **What it does NOT fix:** semantic conflicts (two clean merges can still break each other — review the diff), orphaned worktrees on machines the skill cannot see (the claim on `main` names the branch and path, so a human can always find and clean it up), and live presence (visibility is still bounded by fetch/push). Fan-out — running one task in N worktrees and picking the best diff — is a separate feature planned after v2.3; this mode gives it the primitives, not the runbook.
 
 Full design: `docs/v2.3-design.md`.
@@ -283,7 +284,7 @@ The team's rules as data, so the hook and CI enforce the same numbers:
 {
   "canonical_remote": "origin",
   "canonical_branch": "main",
-  "skill_version": "2.3.0",
+  "skill_version": "2.3.1",
   "claim_ttl_minutes": 120,
   "heartbeat_minutes": 30,
   "grace_minutes": 15,

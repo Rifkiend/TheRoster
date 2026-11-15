@@ -1,5 +1,5 @@
 {
-  "generated_by": "run_simulations.py — script ASLI TheRoster v2.3.0",
+  "generated_by": "run_simulations.py — script ASLI TheRoster v2.3.1",
   "repo": "Rifkiend/TheRoster",
   "scenarios": [
     {
@@ -24,7 +24,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101 (assistant, until 2026-11-15T11:20:18Z): src/auth/login.py\nPick other work, or wait until their claim expires / is released.",
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101 (assistant, until 2026-11-15T11:32:50Z): src/auth/login.py\nPick other work, or wait until their claim expires / is released.",
           "note": "Satu file = satu pemilik. Klaim kedua DITOLAK sebelum kerja dimulai."
         },
         {
@@ -855,7 +855,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-201 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alice [wt/t-201]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alice wt/t-201 66c9e7809c48fd34fa14d592bf3b9ae71d925661",
+          "output": "CLAIM: OK — t-201 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alice [wt/t-201]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alice wt/t-201 c8918c787489b37c77a15f17d3a9320d1e304434",
           "note": "Klaim mencatat worktree + branch (default wt/t-201) + base_commit."
         },
         {
@@ -864,16 +864,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "t-201 on main: worktree=../wt-alice branch=wt/t-201 base=66c9e780",
+          "output": "t-201 on main: worktree=../wt-alice branch=wt/t-201 base=c8918c78",
           "note": "Klaim di-push sendirian ke main DULU — papan tidak hilang (anti-jebakan Dziatkovskii)."
         },
         {
           "label": "[main] worktree_setup.sh membuat worktree Alice",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-alice wt/t-201 66c9e7809c48fd34fa14d592bf3b9ae71d925661",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-alice wt/t-201 c8918c787489b37c77a15f17d3a9320d1e304434",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at 66c9e78 starter + worktree_mode per-claim\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-alice on branch wt/t-201 (base 66c9e7809c48fd34fa14d592bf3b9ae71d925661)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-alice\nPreparing worktree (new branch 'wt/t-201')",
+          "output": "HEAD is now at c8918c7 starter + worktree_mode per-claim\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-alice on branch wt/t-201 (base c8918c787489b37c77a15f17d3a9320d1e304434)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-alice\nPreparing worktree (new branch 'wt/t-201')",
           "note": ""
         },
         {
@@ -909,16 +909,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-202 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-bob [wt/t-202]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-bob wt/t-202 9f46c63d7b09cc56d565ae0bc36f055dc3fdc665",
+          "output": "CLAIM: OK — t-202 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-bob [wt/t-202]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-bob wt/t-202 34de7ea7a714cbcaf9f106c85211e0338c470709",
           "note": "Dua klaim worktree di worktree BERBEDA boleh menutupi file yang sama."
         },
         {
           "label": "[main] worktree_setup.sh membuat worktree Bob",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-bob wt/t-202 9f46c63d7b09cc56d565ae0bc36f055dc3fdc665",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-bob wt/t-202 34de7ea7a714cbcaf9f106c85211e0338c470709",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at 9f46c63 claim: t-201 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-bob on branch wt/t-202 (base 9f46c63d7b09cc56d565ae0bc36f055dc3fdc665)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-bob\nPreparing worktree (new branch 'wt/t-202')",
+          "output": "HEAD is now at 34de7ea claim: t-201 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-bob on branch wt/t-202 (base 34de7ea7a714cbcaf9f106c85211e0338c470709)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-bob\nPreparing worktree (new branch 'wt/t-202')",
           "note": ""
         },
         {
@@ -958,21 +958,39 @@
           "note": ""
         },
         {
+          "label": "[main] Release klaim t-201 setelah merge",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --task t-201 --by assistant",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-201 -> released. Commit + push the claim file.",
+          "note": "Klaim yang sudah merge bukan lagi janji aktif — dilepas sebelum worktree-nya dihapus."
+        },
+        {
+          "label": "[main] Release klaim t-202 setelah merge",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --task t-202 --by teammate-1",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-202 -> released. Commit + push the claim file.",
+          "note": ""
+        },
+        {
           "label": "[main] Owner klaim t-203 --worktree ../wt-carol",
           "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-203 --title Tambah tes kosong --owner owner --files tests/test_login.py --worktree ../wt-carol",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-203 claimed by owner for 2h — files: tests/test_login.py — worktree ../wt-carol [wt/t-203]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-carol wt/t-203 9b4f4edf3b3cf2dd5b5189167cf16d57baeafe5f",
+          "output": "CLAIM: OK — t-203 claimed by owner for 2h — files: tests/test_login.py — worktree ../wt-carol [wt/t-203]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-carol wt/t-203 45ac88cd90593e58480577783b48d6204541c904",
           "note": ""
         },
         {
           "label": "[main] worktree_setup.sh membuat worktree Carol",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-carol wt/t-203 9b4f4edf3b3cf2dd5b5189167cf16d57baeafe5f",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-carol wt/t-203 45ac88cd90593e58480577783b48d6204541c904",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at 9b4f4ed merge wt/t-202 (t-202)\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-carol on branch wt/t-203 (base 9b4f4edf3b3cf2dd5b5189167cf16d57baeafe5f)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-carol\nPreparing worktree (new branch 'wt/t-203')",
+          "output": "HEAD is now at 45ac88c merge wt/t-202 (t-202)\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-carol on branch wt/t-203 (base 45ac88cd90593e58480577783b48d6204541c904)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-carol\nPreparing worktree (new branch 'wt/t-203')",
           "note": ""
         },
         {
@@ -994,12 +1012,21 @@
           "note": ""
         },
         {
+          "label": "[main] Release klaim t-203 (v2.3.1: lepas dulu sebelum hapus worktree)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --task t-203 --by owner",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-203 -> released. Commit + push the claim file.",
+          "note": ""
+        },
+        {
           "label": "Validasi akhir semua file tim",
           "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! claim t-201: worktree ../wt-alice is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! claim t-202: worktree ../wt-bob is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! claim t-203: worktree ../wt-carol is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nVALIDATE: OK — 3 roster member(s), 4 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 12 team/ file(s) scanned for secrets/PII.",
+          "output": "VALIDATE: OK — 3 roster member(s), 4 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 12 team/ file(s) scanned for secrets/PII.",
           "note": ""
         }
       ],
@@ -1032,21 +1059,355 @@
             "released_by": null
           },
           "t-201": {
+            "status": "released",
+            "version": null,
+            "owner": "assistant",
+            "released_by": "assistant"
+          },
+          "t-202": {
+            "status": "released",
+            "version": null,
+            "owner": "teammate-1",
+            "released_by": "teammate-1"
+          },
+          "t-203": {
+            "status": "released",
+            "version": null,
+            "owner": "owner",
+            "released_by": "owner"
+          }
+        },
+        "features": {
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
+    },
+    {
+      "id": "s8",
+      "title": "Worktree gates (v2.3.1): alias path, deleted worktree, dirty worktree, branch mismatch",
+      "team": "Tim bangun website (2 AI + owner)",
+      "story": "Ronde kasus ekstrem v2.3.0 menemukan satu cacat dan dua gap di gerbang worktree: worktree yang sama dieja dua cara lolos, worktree yang dihapus tidak digagalkan gate mana pun, dan worktree kotor lolos sync_check dengan pesan 'Safe to push'. Skenario ini mereproduksi ketiganya (plus asimetri claim check) terhadap script yang sudah diperbaiki — semuanya harus berperilaku benar.",
+      "tanpa_roster": "Dua agent mendarat di worktree yang sama tanpa sadar (satu pakai path relatif, satu absolut), klaim atas worktree yang sudah dihapus lolos semua gate, dan agen mem-push cabang yang pekerjaannya belum di-commit.",
+      "steps": [
+        {
+          "label": "[main] E3c: klaim t-801 --worktree ../wt-alias (belum dibuat)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-801 --title Uji alias path --owner assistant --files tests/test_login.py --worktree ../wt-alias",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-801 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alias [wt/t-801]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alias wt/t-801 02b53343b16478907db6b81e5462cd53456aab59",
+          "note": "Klaim pertama diterima; worktree belum dibuat (jendela klaim-dulu-baru-setup)."
+        },
+        {
+          "label": "[main] E3c: klaim t-802 --worktree <absolut>/wt-alias HARUS DITOLAK",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-802 --title Uji alias path --owner teammate-1 --files tests/test_login.py --worktree /tmp/sim-work/s8-worktree-gates/wt-alias",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-801 (assistant, until 2026-11-15T11:32:57Z): tests/test_login.py\nPick other work, or wait until their claim expires / is released.",
+          "note": "v2.3.0: DITERIMA (cacat — string mentah dibandingkan). v2.3.1: path dikanonikalisasi, jadi ini worktree yang sama."
+        },
+        {
+          "label": "[main] E3c: claim.py check — tidak ada konflik tercatat",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\n  ! t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nCLAIM CHECK: OK — 2 claim(s), 1 blocking, no conflicts.",
+          "note": "Klaim kedua tidak pernah tercatat, jadi check lolos (peringatan worktree t-801 yang belum dibuat boleh muncul)."
+        },
+        {
+          "label": "[main] E3c: validate.py — tidak ada konflik tercatat",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! claim t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nVALIDATE: OK — 3 roster member(s), 2 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 10 team/ file(s) scanned for secrets/PII.",
+          "note": "Sama: tidak ada dua klaim di worktree yang sama di file."
+        },
+        {
+          "label": "[main] E2: klaim t-803 --worktree ../wt-del",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-803 --title Uji worktree dihapus --owner assistant --files tests/test_login.py --worktree ../wt-del",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-803 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-del [wt/t-803]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-del wt/t-803 89459f32cae8d99e723ffa0f9c2d46f9dbaba720",
+          "note": ""
+        },
+        {
+          "label": "[main] E2: worktree_setup.sh membuat worktree",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-del wt/t-803 89459f32cae8d99e723ffa0f9c2d46f9dbaba720",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "HEAD is now at 89459f3 claim: t-801 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-del on branch wt/t-803 (base 89459f32cae8d99e723ffa0f9c2d46f9dbaba720)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-del\nPreparing worktree (new branch 'wt/t-803')",
+          "note": ""
+        },
+        {
+          "label": "[main] E2: validate.py HARUS GAGAL — worktree hilang, branch masih ada",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "! claim t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nVALIDATE: FAIL — do not push until this is fixed:\n  - claim t-803: worktree ../wt-del is gone but branch wt/t-803 still exists here — the worktree was removed; release the claim or recreate the worktree",
+          "note": "v2.3.0: exit 0, peringatan saja. v2.3.1: branch wt/t-803 masih ada di sini, jadi worktree-nya dihapus di mesin ini — gagal."
+        },
+        {
+          "label": "[main] E2: claim.py check HARUS GAGAL",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "! t-001: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\n  ! t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-803: worktree ../wt-del is gone but branch wt/t-803 still exists here — the worktree was removed; release the claim or recreate the worktree",
+          "note": "v2.3.0: exit 0, tidak ada yang menangkap. v2.3.1: gagal dengan pesan yang sama."
+        },
+        {
+          "label": "[main] E2: sync_check --claim t-803 HARUS GAGAL",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-803",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "SYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-803: worktree ../wt-del is gone but branch wt/t-803 still exists here — the worktree was removed; release the claim or recreate the worktree\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "note": "v2.3.0: exit 0, skip+note. v2.3.1: gagal — lepas klaimnya atau buat ulang worktree-nya."
+        },
+        {
+          "label": "[main] E2: release t-803 (klaim dilepas — bukan lagi janji aktif)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --task t-803 --by assistant",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-803 -> released. Commit + push the claim file.",
+          "note": "Supaya validasi akhir tidak gagal karena klaim ini."
+        },
+        {
+          "label": "[main] E7: klaim t-804 --worktree ../wt-remote (tidak pernah dibuat)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-804 --title Uji lintas-mesin --owner assistant --files tests/test_login.py --worktree ../wt-remote",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-804 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-remote [wt/t-804]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-remote wt/t-804 a078996cbe1306fd0c5c1f9b393d820de7a2f657",
+          "note": ""
+        },
+        {
+          "label": "[main] E7: validate.py LOLOS (peringatan saja) — branch tidak ada di sini",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! claim t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! claim t-804: worktree ../wt-remote is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nVALIDATE: OK — 3 roster member(s), 4 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 12 team/ file(s) scanned for secrets/PII.",
+          "note": "Worktree + branch sama-sama tidak ada di mesin ini: bisa jadi di laptop teman — tetap skip+note, bukan gagal."
+        },
+        {
+          "label": "[main] E7: sync_check --claim t-804 LOLOS (note saja)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-804",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "SYNC CHECK: note — worktree claim t-804: worktree ../wt-remote is not present on this machine — merge check skipped here; the merge is the PR's job\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "note": "Merge check diserahkan ke PR, sesuai desain v2.3."
+        },
+        {
+          "label": "[main] E5: klaim t-805 --worktree ../wt-dirty",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-805 --title Uji worktree kotor --owner assistant --files tests/test_login.py --worktree ../wt-dirty",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-805 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-dirty [wt/t-805]\nCommit trailer to use on every commit touching these files: [claim #5]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-dirty wt/t-805 ecaef59208ea3d96468c0781f4e53b26cf744a41",
+          "note": ""
+        },
+        {
+          "label": "[main] E5: worktree_setup.sh membuat worktree",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-dirty wt/t-805 ecaef59208ea3d96468c0781f4e53b26cf744a41",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "HEAD is now at ecaef59 claim: t-804 [claim #4]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-dirty on branch wt/t-805 (base ecaef59208ea3d96468c0781f4e53b26cf744a41)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-dirty\nPreparing worktree (new branch 'wt/t-805')",
+          "note": ""
+        },
+        {
+          "label": "[wt-dirty] Edit file TANPA commit (worktree kotor)",
+          "cmd": "write tests/test_login.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "\"\"\"Smoke test for the example `login-api` entry point.\"\"\"\n\nimport sys, os\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), \"..\", \"src\"))\n\nfrom auth.login import login\n\n\ndef test_login_returns_a_token():\n    result = login(\"rian@example.com\", \"rahasia\")\n    assert result[\"email\"] == \"rian@example.com\"\n    assert result[\"token\"].startswith(\"session-\")\n\n\ndef test_login_rejects_empty_passwor",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "[main] E5: sync_check --claim t-805 HARUS GAGAL — ada perubahan belum di-commit",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-805",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "SYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-805: worktree ../wt-dirty has uncommitted changes — commit them first; the merge check only sees commits, so this work is not part of the merge:  M tests/test_login.py\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "note": "v2.3.0: exit 0 + 'Safe to push' padahal kerja belum ada di branch. v2.3.1: gagal, 'commit dulu'."
+        },
+        {
+          "label": "[main] E5: setelah commit, sync_check --claim t-805 LOLOS",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-805",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "SYNC CHECK: note — worktree claim t-805: branch wt/t-805 merges cleanly onto origin/main (1 commits behind, within the 20 limit)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "note": ""
+        },
+        {
+          "label": "[main] E8b: klaim t-806 --worktree ../wt-mm",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-806 --title Uji branch mismatch --owner teammate-1 --files tests/test_login.py --worktree ../wt-mm",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-806 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-mm [wt/t-806]\nCommit trailer to use on every commit touching these files: [claim #6]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-mm wt/t-806 b4859920401e32f4689b7c793c8cb6dc7712a03c",
+          "note": ""
+        },
+        {
+          "label": "[main] E8b: worktree_setup.sh membuat worktree",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-mm wt/t-806 b4859920401e32f4689b7c793c8cb6dc7712a03c",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "HEAD is now at b485992 claim: t-805 [claim #5]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-mm on branch wt/t-806 (base b4859920401e32f4689b7c793c8cb6dc7712a03c)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-mm\nPreparing worktree (new branch 'wt/t-806')",
+          "note": ""
+        },
+        {
+          "label": "[main] E8b: edit klaim — branch diganti manual jadi 'main'",
+          "cmd": "python3 -c import json; p = 'team/claims/t-806.json'; c = json.load(open(p)); c['branch'] = 'main'; json.dump(c, open(p, 'w'), indent=2, sort_keys=True); print('branch diganti manual (simulasi klaim yang menunjuk ke branch lain)')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "branch diganti manual (simulasi klaim yang menunjuk ke branch lain)",
+          "note": "Aksi pengrusakan file klaim (bukan script) — seperti ronde ekstrem E8."
+        },
+        {
+          "label": "[main] E8b: claim.py check HARUS GAGAL — branch mismatch",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "! t-001: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\n  ! t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! t-804: worktree ../wt-remote is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-806: worktree at ../wt-mm is on branch wt/t-806, but the claim says main — fix the claim or the worktree",
+          "note": "v2.3.0: exit 0 (tidak menangkap). v2.3.1: gagal — worktree di wt/t-806, klaim bilang main."
+        },
+        {
+          "label": "[main] E8b: sync_check --claim t-806 HARUS GAGAL",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-806",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "SYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-806: worktree at ../wt-mm is on branch wt/t-806, but the claim says main — fix the claim or the worktree\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "note": "Sudah gagal di v2.3.0 juga — regresi, jangan sampai rusak."
+        },
+        {
+          "label": "[main] E8b: validate.py HARUS GAGAL",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "! claim t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! claim t-804: worktree ../wt-remote is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nVALIDATE: FAIL — do not push until this is fixed:\n  - claim t-806: worktree at ../wt-mm is on branch wt/t-806, but the claim says main",
+          "note": "Sudah gagal di v2.3.0 juga — regresi, jangan sampai rusak."
+        },
+        {
+          "label": "[main] E8b: kembalikan branch klaim ke wt/t-806",
+          "cmd": "python3 -c import json; p = 'team/claims/t-806.json'; c = json.load(open(p)); c['branch'] = 'wt/t-806'; json.dump(c, open(p, 'w'), indent=2, sort_keys=True); print('branch dikembalikan')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "branch dikembalikan",
+          "note": ""
+        },
+        {
+          "label": "[main] E8b: claim.py check LOLOS lagi setelah diperbaiki",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\n  ! t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! t-804: worktree ../wt-remote is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nCLAIM CHECK: OK — 6 claim(s), 4 blocking, no conflicts.",
+          "note": "Membuktikan gagalnya tadi memang karena mismatch, bukan karena klaimnya."
+        },
+        {
+          "label": "Validasi akhir semua file tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! claim t-801: worktree ../wt-alias is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! claim t-804: worktree ../wt-remote is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nVALIDATE: OK — 3 roster member(s), 6 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 14 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-801": {
             "status": "active",
             "version": null,
             "owner": "assistant",
             "released_by": null
           },
-          "t-202": {
+          "t-803": {
+            "status": "released",
+            "version": null,
+            "owner": "assistant",
+            "released_by": "assistant"
+          },
+          "t-804": {
+            "status": "active",
+            "version": null,
+            "owner": "assistant",
+            "released_by": null
+          },
+          "t-805": {
+            "status": "active",
+            "version": null,
+            "owner": "assistant",
+            "released_by": null
+          },
+          "t-806": {
             "status": "active",
             "version": null,
             "owner": "teammate-1",
-            "released_by": null
-          },
-          "t-203": {
-            "status": "active",
-            "version": null,
-            "owner": "owner",
             "released_by": null
           }
         },
@@ -1076,9 +1437,9 @@
     }
   ],
   "summary": {
-    "scenarios": 7,
-    "steps": 63,
-    "gates_ok": 63,
+    "scenarios": 8,
+    "steps": 93,
+    "gates_ok": 93,
     "gates_failed": 0
   }
 }
