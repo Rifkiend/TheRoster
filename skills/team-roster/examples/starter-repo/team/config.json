@@ -8,8 +8,10 @@
   "heartbeat_minutes": 30,
   "max_claims_per_agent": 5,
   "max_files_per_claim": 10,
+  "max_lifetime_hours": 24,
   "prd_required": false,
-  "skill_version": "2.3.1",
+  "require_signatures": false,
+  "skill_version": "2.4.0",
   "strict_deps": false,
   "worktree_copy_files": [
     ".env",

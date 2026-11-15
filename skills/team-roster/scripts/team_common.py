@@ -18,14 +18,27 @@ Rules implemented here (team-roster v2.0 contract):
   agent id.
 - claim_seq: monotonic per claimed file = max existing claim_seq for
   that file across team/claims/ + 1.
+- created_seq (v2.4): monotonic creation counter across ALL claims =
+  max existing created_seq + 1, assigned once at claim time, never
+  bumped by mutation. ``claim_order_key`` is (created_seq, owner_id)
+  — "first" means created first; records without created_seq fall
+  back to lamport. Honest limit: concurrent creators can compute the
+  same number; the push fence adjudicates.
+- max_lifetime_hours (v2.4, default 24): a claim dies this long after
+  started_at no matter how fresh its heartbeat is; 0 disables the cap.
 - paths are compared canonically (lowercased); exact file paths only.
+- Signed identity (v2.4, opt-in via require_signatures): roster
+  records may carry an SSH ``public_key``; ``verify_commit_signature``
+  checks a commit against ONE key via a temp allowed-signers file.
 """
+import base64
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from datetime import datetime, timedelta, timezone
 
@@ -40,7 +53,7 @@ SEMVER_RE = re.compile(
 DEFAULT_CONFIG = {
     "canonical_remote": "origin",
     "canonical_branch": "main",
-    "skill_version": "2.3.1",
+    "skill_version": "2.4.0",
     "claim_ttl_minutes": 120,
     "heartbeat_minutes": 30,
     "grace_minutes": 15,
@@ -62,6 +75,15 @@ DEFAULT_CONFIG = {
     "worktree_shared_dirs": ["node_modules", ".cache"],
     # Files copied (never symlinked) from the main checkout into a worktree.
     "worktree_copy_files": [".env", ".env.local"],
+    # Signed identity (v2.4). Off by default: v2.4 changes nothing for
+    # teams that don't opt in. On means validate.py verifies that every
+    # commit in the push range touching team/ is signed by the SSH key
+    # recorded on the roster for the record's owner.
+    "require_signatures": False,
+    # Hard claim lifetime (v2.4), in hours. A claim dies this long after
+    # started_at no matter how fresh its heartbeat is. 0 disables the
+    # cap (a team that genuinely wants immortal claims says so).
+    "max_lifetime_hours": 24,
 }
 
 
@@ -574,11 +596,25 @@ def is_heartbeat_stale(claim, at=None, heartbeat_minutes=30):
 def is_stealable(claim, at=None, cfg=None):
     """Stealable only when now > expires_at + grace AND the heartbeat
     is stale. Expiry alone never frees a claim while its owner is
-    still heartbeating."""
+    still heartbeating.
+
+    v2.4: a claim is ALSO stealable past its hard lifetime —
+    now > started_at + max_lifetime_hours (default 24h) — no matter
+    how fresh the heartbeat is. A heartbeat can keep a claim alive
+    for hours; it cannot keep it alive forever. Set
+    max_lifetime_hours to 0 to disable the cap."""
     cfg = cfg or DEFAULT_CONFIG
     at = at or now()
     if claim.get("status") != "active":
         return False
+    try:
+        max_life = float(cfg.get("max_lifetime_hours", 24) or 0)
+    except (TypeError, ValueError):
+        max_life = 24
+    if max_life > 0:
+        started = parse_time(claim.get("started_at") or "")
+        if started is not None and at > started + timedelta(hours=max_life):
+            return True
     exp = parse_time(claim.get("expires_at") or "")
     if exp is None:
         return False
@@ -594,16 +630,32 @@ def is_blocking(claim, at=None, cfg=None):
 
 
 def claim_order_key(claim):
-    """Causal order of two claims: (lamport, owner_id). Wall-clock
+    """Causal order of two claims: (created_seq, owner_id). Wall-clock
     timestamps NEVER decide "who claimed first" — a skewed clock can
-    be 10 minutes in the future. The claim with the higher lamport
-    came later; on a lamport tie, the higher owner_id (lexicographic)
-    is the later one, so the order is deterministic."""
+    be 10 minutes in the future.
+
+    v2.4: `created_seq` is a monotonic creation counter, assigned at
+    claim time and never bumped by mutation — so "first" means
+    created first. (v2.3 and earlier used lamport here, but lamport
+    counts *mutations*: every new claim starts at lamport 1, so for
+    fresh claims "first" was alphabetical, and heartbeating a claim
+    made it *later*. Records written before v2.4 have no
+    created_seq; for them the key falls back to lamport.)
+    The claim with the higher created_seq came later; on a tie, the
+    higher owner_id (lexicographic) is the later one, so the order
+    is deterministic. Honest limit: two agents creating claims
+    concurrently can compute the same created_seq — a file cannot
+    be an atomic counter; the push fence adjudicates that race."""
     try:
-        lamport = int(claim.get("lamport") or 0)
+        seq = int(claim.get("created_seq") or 0)
     except (TypeError, ValueError):
-        lamport = 0
-    return (lamport, str(claim.get("owner_id") or ""))
+        seq = 0
+    if seq <= 0:
+        try:
+            seq = int(claim.get("lamport") or 0)
+        except (TypeError, ValueError):
+            seq = 0
+    return (seq, str(claim.get("owner_id") or ""))
 
 
 def claim_status_note(claim, at=None, cfg=None):
@@ -613,6 +665,14 @@ def claim_status_note(claim, at=None, cfg=None):
     if claim.get("status") != "active":
         return "status=%s" % claim.get("status")
     if is_stealable(claim, at, cfg):
+        try:
+            max_life = float(cfg.get("max_lifetime_hours", 24) or 0)
+        except (TypeError, ValueError):
+            max_life = 24
+        started = parse_time(claim.get("started_at") or "")
+        if (max_life > 0 and started is not None
+                and at > started + timedelta(hours=max_life)):
+            return "STEALABLE (past max lifetime of %gh — release it and re-claim as a new task)" % max_life
         return "STEALABLE (expired + heartbeat stale)"
     exp = parse_time(claim.get("expires_at") or "")
     if exp is not None and at > exp:
@@ -756,6 +816,102 @@ def next_claim_seq(claims_dir, files):
             if canonical_path(f) in wanted and seq >= best:
                 best = seq
     return best + 1
+
+
+def next_created_seq(claims_dir):
+    """created_seq for a new claim (v2.4): max existing created_seq
+    across ALL team/claims/ + 1. Unlike claim_seq it is per-claim,
+    not per-file, and it is never bumped by mutation — heartbeat,
+    renewal, flag, and stall all move lamport only.
+
+    Honest limit: two agents creating claims concurrently can
+    compute the same number (both read max N, both write N+1). A
+    file cannot be an atomic counter; the push fence (first push
+    wins + claim_seq per file + claim check on merge) adjudicates
+    that race. created_seq orders creation within one repo's
+    visible history — it is not a distributed counter."""
+    best = 0
+    for _stem, (_path, rec) in load_records(claims_dir).items():
+        if not isinstance(rec, dict):
+            continue
+        try:
+            seq = int(rec.get("created_seq") or 0)
+        except (TypeError, ValueError):
+            seq = 0
+        if seq > best:
+            best = seq
+    return best + 1
+
+
+# ---------------------------------------------------------------------------
+# Signed identity (v2.4)
+# ---------------------------------------------------------------------------
+
+SSH_KEY_TYPES = {
+    "ssh-ed25519", "ssh-rsa",
+    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
+    "sk-ssh-ed25519@openssh.com", "sk-ecdsa-sha2-nistp256@openssh.com",
+}
+
+
+def valid_public_key(value):
+    """True iff `value` looks like one SSH public key line:
+    `<type> <base64 blob> [comment]`. Format only — it does not
+    prove anyone holds the private key (that is the roster's
+    human-approval step, not this check)."""
+    if not isinstance(value, str):
+        return False
+    parts = value.strip().split()
+    if len(parts) < 2:
+        return False
+    if parts[0] not in SSH_KEY_TYPES:
+        return False
+    try:
+        raw = base64.b64decode(parts[1], validate=True)
+    except Exception:
+        return False
+    return len(raw) >= 16
+
+
+def verify_commit_signature(repo_root, commit_sha, public_key, principal="theroster"):
+    """Was `commit_sha` signed by `public_key`?
+
+    Returns (ok, error). `ok` is True only when git verifies the
+    commit's signature against a temp allowed-signers file holding
+    ONLY that key — so a signature from any other key fails, and an
+    unsigned commit fails. `error` explains the failure (last line
+    of git's stderr) or is None on success.
+
+    Mechanism: `git -c gpg.format=ssh -c
+    gpg.ssh.allowedSignersFile=<tmp> verify-commit <sha>`. The -c
+    overrides mean the check works regardless of the repo's own
+    git config. git shells out to ssh-keygen for SSH verification;
+    if ssh-keygen is missing, verification fails with an error
+    that says so."""
+    if not repo_root or not commit_sha or not public_key:
+        return (False, "missing repo, commit, or key")
+    if not valid_public_key(public_key):
+        return (False, "public key is not a valid SSH public key")
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(prefix="theroster-allowed-signers-")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("%s %s\n" % (principal, public_key.strip()))
+        r = run_git(["-c", "gpg.format=ssh",
+                     "-c", "gpg.ssh.allowedSignersFile=" + tmp,
+                     "verify-commit", commit_sha], cwd=repo_root)
+        if r.returncode == 0:
+            return (True, None)
+        lines = [ln for ln in (r.stderr or "").strip().splitlines() if ln.strip()]
+        return (False, lines[-1] if lines else "signature verification failed")
+    except OSError as e:
+        return (False, "could not verify signature: %s" % e)
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def team_dir_of(subdir):

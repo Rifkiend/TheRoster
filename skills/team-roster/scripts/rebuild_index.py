@@ -55,6 +55,8 @@ def build_index(team_dir):
             # v2.3: where the work happens ("" = shared checkout).
             "branch": rec.get("branch", ""),
             "worktree": rec.get("worktree", ""),
+            # v2.4: creation order ("" = pre-v2.4 record, ordered by lamport).
+            "created_seq": rec.get("created_seq", ""),
         })
     features = []
     for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "features")).items():

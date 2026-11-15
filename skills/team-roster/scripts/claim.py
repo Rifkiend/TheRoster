@@ -44,6 +44,9 @@ Rules:
   grace AND its heartbeat is stale (30+ min without a heartbeat,
   config heartbeat_minutes). An expired claim whose owner is still
   heartbeating still blocks — the owner is alive, just overdue.
+  v2.4: a claim ALSO dies max_lifetime_hours (default 24h) after
+  started_at no matter how fresh the heartbeat is — renewal past
+  the cap FAILS (release it and re-claim as a new task).
 - Every mutating command bumps the claim's lamport (+1), appends one
   line to team/events.jsonl, and rebuilds team/index.json.
 - claim_seq is monotonic per claimed file (max existing claim_seq for
@@ -52,6 +55,14 @@ Rules:
   claim_seq on origin/main is higher than the trailer's (someone
   re-claimed it after you). This is a fencing approximation, not a
   real lock: a human can forge a trailer.
+- created_seq (v2.4) is monotonic across ALL claims (max existing
+  created_seq + 1), assigned once at claim time and never bumped by
+  mutation. "Who claimed first" is decided by (created_seq,
+  owner_id) — never by wall-clock, and no longer by lamport (which
+  counts mutations: every new claim starts at lamport 1, so "first"
+  used to be alphabetical). Honest limit: two agents creating
+  claims concurrently can compute the same created_seq; the push
+  fence adjudicates that race.
 - Quotas (from team/config.json, defaults 5 claims/agent, 10
   files/claim): claiming past them FAILS.
 - handoff is the ONLY way a claim's owner changes: it writes
@@ -128,7 +139,7 @@ def load_prd_item(team_dir, pid):
 def check_conflicts(claims, files, exclude_task=None, new_claim=None,
                      repo_root=None):
     """Returns [(claim, [overlapping files]), ...] against blocking claims,
-    ordered by (lamport, owner_id) — the claim that claimed first comes
+    ordered by (created_seq, owner_id) — the claim that claimed first comes
     first, so the caller can say who must yield.
 
     Worktree exemption (v2.3): a new worktree claim does NOT conflict
@@ -344,7 +355,7 @@ def cmd_check(claims_dir, roster_path, config_path):
                 # Worktree exemption (v2.3): two worktree claims on
                 # different worktrees may cover the same file.
                 if other_id != task_id and tc.claims_share_checkout(c, other_claim, main_root):
-                    # "First" is decided by (lamport, owner_id), never
+                    # "First" is decided by (created_seq, owner_id), never
                     # by wall-clock — a skewed clock can be minutes in
                     # the future. The later claim must yield.
                     first, second = sorted(
@@ -352,7 +363,7 @@ def cmd_check(claims_dir, roster_path, config_path):
                         key=lambda pair: tc.claim_order_key(pair[0]))
                     errors.append(
                         f"CONFLICT: file {f} claimed by both {other_id} and {task_id} — "
-                        f"first by (lamport, owner) is {first[1]} (lamport {first[0].get('lamport')}), "
+                        f"first by (created_seq, owner) is {first[1]} (created_seq {first[0].get('created_seq') or first[0].get('lamport')}), "
                         f"so {second[1]} must yield")
             elif tc.is_blocking(c):
                 seen_lower[low] = (task_id, c)
@@ -360,8 +371,18 @@ def cmd_check(claims_dir, roster_path, config_path):
             owner_active_count[c.get("owner_id")] = owner_active_count.get(c.get("owner_id"), 0) + 1
         if c.get("status") == "active" and tc.parse_time(c.get("expires_at") or ""):
             if tc.is_stealable(c, cfg=cfg):
-                warnings.append(f"{task_id}: stealable — expired + heartbeat stale for "
-                                f"{cfg['heartbeat_minutes']}+ min; anyone may re-claim these files")
+                try:
+                    max_life = float(cfg.get("max_lifetime_hours", 24) or 0)
+                except (TypeError, ValueError):
+                    max_life = 24
+                started = tc.parse_time(c.get("started_at") or "")
+                if (max_life > 0 and started is not None
+                        and tc.now() > started + tc.timedelta(hours=max_life)):
+                    warnings.append(f"{task_id}: past max lifetime of {max_life:g}h — the claim is dead "
+                                    "no matter how fresh the heartbeat is; release it and re-claim as a new task")
+                else:
+                    warnings.append(f"{task_id}: stealable — expired + heartbeat stale for "
+                                    f"{cfg['heartbeat_minutes']}+ min; anyone may re-claim these files")
     for owner, n in sorted(owner_active_count.items()):
         if n > cfg["max_claims_per_agent"]:
             errors.append(f"{owner}: {n} active claims exceeds max_claims_per_agent={cfg['max_claims_per_agent']}")
@@ -383,7 +404,7 @@ def cmd_check(claims_dir, roster_path, config_path):
                             [(c1, t1), (c2, t2)],
                             key=lambda pair: tc.claim_order_key(pair[0]))
                         errors.append(f"CONFLICT: {f} ({t1}) overlaps {g} ({t2}) — one path is a prefix "
-                                      f"of the other; first by (lamport, owner) is {first[1]}, "
+                                      f"of the other; first by (created_seq, owner) is {first[1]}, "
                                       f"so {second[1]} must yield")
     # Two blocking worktree claims must not share a worktree path or a branch.
     seen_wt_path, seen_wt_branch = {}, {}
@@ -547,6 +568,21 @@ def cmd_claim(args):
         if existing.get("owner_id") != args.owner:
             print(f"CLAIM: FAIL — {args.task} is already actively claimed by {existing.get('owner_id')}")
             return 1
+        # v2.4: renewal past the hard lifetime cap FAILS — a claim
+        # cannot be extended past max_lifetime_hours by re-claiming
+        # it. Release it and re-claim as a new task (new created_seq,
+        # new claim_seq, honest audit trail).
+        try:
+            max_life = float(cfg.get("max_lifetime_hours", 24) or 0)
+        except (TypeError, ValueError):
+            max_life = 24
+        started = tc.parse_time(existing.get("started_at") or "")
+        if (max_life > 0 and started is not None
+                and tc.now() > started + tc.timedelta(hours=max_life)):
+            print(f"CLAIM: FAIL — {args.task} is past its max lifetime of {max_life:g}h "
+                  "(started %s) — renewal is refused; release it and re-claim as a new task"
+                  % existing.get("started_at"))
+            return 1
         # Renewal: same task re-claims (extend expiry, update files).
         # The effective worktree is the new one when --worktree is
         # given, else the claim's existing worktree (if any).
@@ -617,6 +653,9 @@ def cmd_claim(args):
         "heartbeat_at": tc.to_utc_z(start),
         "lamport": 1,
         "claim_seq": seq,
+        # v2.4: creation order — assigned once, never bumped by
+        # mutation. See team_common.next_created_seq().
+        "created_seq": tc.next_created_seq(claims_dir),
         "reserves_feature": args.reserves_feature or "",
         "prd_item": prd_item,
         "expected_duration": args.expected_duration or "",
