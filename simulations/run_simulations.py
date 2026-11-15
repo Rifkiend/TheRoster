@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simulasi bervariasi TheRoster — 6 skenario, pakai script ASLI skill (bukan mock).
+"""Simulasi bervariasi TheRoster — 7 skenario, pakai script ASLI skill (bukan mock).
 
 Setiap skenario jalan di salinan segar starter-repo, merekam perintah persis,
 exit code, dan output asli tiap langkah. Hasil: transcripts.json (+ README.md).
@@ -408,14 +408,177 @@ def s6():
     return scn
 
 
+# ---------------------------------------------------------------- S7: worktree-per-claim (v2.3)
+def s7():
+    base = WORK / "s7-worktree"
+    if base.exists():
+        shutil.rmtree(base)
+    base.mkdir(parents=True)
+    git(["init", "--bare", "-b", "main", "remote.git"], base)
+    git(["clone", "-q", "remote.git", "work-main"], base)
+    main = base / "work-main"
+    git(["config", "user.email", "sim@theroster.test"], main)
+    git(["config", "user.name", "Sim"], main)
+    shutil.copytree(STARTER, main, dirs_exist_ok=True)
+    # Opt in to worktree mode for this fixture.
+    cfg_path = main / "team" / "config.json"
+    cfg = json.loads(cfg_path.read_text())
+    cfg["worktree_mode"] = "per-claim"
+    cfg_path.write_text(json.dumps(cfg, indent=2, sort_keys=True))
+    git(["add", "-A"], main)
+    git(["commit", "-q", "-m", "starter + worktree_mode per-claim"], main)
+    git(["push", "-q", "origin", "main"], main)
+    scn = {"id": "s7", "title": "Worktree-per-claim: dua AI garap file yang sama, tanpa overwrite",
+           "team": "Tim bangun website (2 AI + owner)",
+           "story": "Assistant dan teammate-1 sama-sama harus menyentuh "
+                    "tests/test_login.py di saat yang sama. Di checkout bersama "
+                    "itu tabrakan; di dua worktree, masing-masing jalan sendiri "
+                    "dan merge satu per satu dengan bersih. Klaimnya tetap "
+                    "terlihat di main — papan tidak hilang.",
+           "tanpa_roster": "Dua AI edit file yang sama di satu checkout. Yang "
+                           "push belakangan menimpa kerjaan yang push duluan — "
+                           "atau merge conflict di file yang sama, dan salah satu "
+                           "sisi harus resolve manual tanpa tahu mana yang benar.",
+           "steps": []}
+    claim = ["python3", str(SCRIPTS / "claim.py"), "claim",
+             "--claims-dir", "team/claims", "--roster", "team/roster",
+             "--config", "team/config.json"]
+    sync = ["python3", str(SCRIPTS / "sync_check.py"), "team/features", "team/claims",
+            "--remote", "origin", "--branch", "main"]
+
+    # --- mode off: --worktree must be refused (separate fresh copy) ---
+    off = fresh("s7-mode-off")
+    step(scn, "[s7-mode-off] --worktree dengan mode off DITOLAK",
+         ["python3", str(SCRIPTS / "claim.py"), "claim",
+          "--claims-dir", "team/claims", "--roster", "team/roster",
+          "--config", "team/config.json",
+          "--task", "t-200", "--title", "Mode off",
+          "--owner", "assistant", "--files", "tests/test_login.py",
+          "--worktree", "../wt-off"], off, "fail",
+         "worktree_mode default off — tim harus opt-in dulu di team/config.json.")
+
+    # --- (a) two agents, two worktrees, same file ---
+    step(scn, "[main] Assistant klaim t-201 --worktree ../wt-alice (file yang sama)",
+         claim + ["--task", "t-201", "--title", "Tambah tes token per user",
+                  "--owner", "assistant", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-alice"], main, "pass",
+         "Klaim mencatat worktree + branch (default wt/t-201) + base_commit.")
+    rc, out = git(["add", "team/claims/t-201.json"], main)
+    git(["commit", "-q", "-m", "claim: t-201 [claim #2]"], main)
+    git(["push", "-q", "origin", "main"], main)
+    # (c) the board doesn't disappear: a fresh clone sees the worktree claim.
+    git(["clone", "-q", "remote.git", "work-bob"], base)
+    bob_main = base / "work-bob"
+    git(["config", "user.email", "sim@theroster.test"], bob_main)
+    git(["config", "user.name", "Sim"], bob_main)
+    step(scn, "[fresh clone] Klaim worktree t-201 TERLIHAT dari main checkout",
+         ["python3", "-c",
+          "import json; c = json.load(open('team/claims/t-201.json')); "
+          "assert c['worktree'] == '../wt-alice' and c['branch'] == 'wt/t-201' and c['base_commit'], c; "
+          "print('t-201 on main: worktree=%s branch=%s base=%s' % (c['worktree'], c['branch'], c['base_commit'][:8]))"],
+         bob_main, "pass",
+         "Klaim di-push sendirian ke main DULU — papan tidak hilang (anti-jebakan Dziatkovskii).")
+    base_commit = json.loads((main / "team" / "claims" / "t-201.json").read_text())["base_commit"]
+    wt_alice = base / "wt-alice"
+    step(scn, "[main] worktree_setup.sh membuat worktree Alice",
+         ["bash", str(SCRIPTS / "worktree_setup.sh"),
+          "../wt-alice", "wt/t-201", base_commit], main, "pass")
+    # Mutation guard + read redirect, from inside the worktree.
+    step(scn, "[wt-alice] heartbeat dari DALAM worktree DITOLAK (guard)",
+         ["python3", str(SCRIPTS / "claim.py"), "heartbeat", "--task", "t-201"],
+         wt_alice, "fail",
+         "Mutasi team/ state hanya dari main checkout — cd ke sana dulu.")
+    step(scn, "[wt-alice] list dari dalam worktree: dialihkan ke main + catatan",
+         ["python3", str(SCRIPTS / "claim.py"), "list"],
+         wt_alice, "pass",
+         "Pembacaan state team/ selalu dari main checkout, bukan salinan worktree.")
+    alice_test = (wt_alice / "tests" / "test_login.py").read_text()
+    file_action(scn, "[wt-alice] Alice tambah tes baru di akhir file",
+                "tests/test_login.py",
+                alice_test + '\n\ndef test_login_token_is_per_user():\n    a = login("rian@example.com", "rahasia")\n    b = login("sinta@example.com", "rahasia")\n    assert a["token"] != b["token"]\n',
+                wt_alice)
+    git(["add", "-A"], wt_alice)
+    git(["commit", "-q", "-m", "t-201: tambah tes token per user [claim #2]"], wt_alice)
+    step(scn, "[main] Teammate-1 klaim t-202 --worktree ../wt-bob, FILE YANG SAMA",
+         claim + ["--task", "t-202", "--title", "Perjelas docstring tes",
+                  "--owner", "teammate-1", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-bob"], main, "pass",
+         "Dua klaim worktree di worktree BERBEDA boleh menutupi file yang sama.")
+    rc, out = git(["add", "team/claims/t-202.json"], main)
+    git(["commit", "-q", "-m", "claim: t-202 [claim #3]"], main)
+    git(["push", "-q", "origin", "main"], main)
+    base_commit_b = json.loads((main / "team" / "claims" / "t-202.json").read_text())["base_commit"]
+    wt_bob = base / "wt-bob"
+    step(scn, "[main] worktree_setup.sh membuat worktree Bob",
+         ["bash", str(SCRIPTS / "worktree_setup.sh"),
+          "../wt-bob", "wt/t-202", base_commit_b], main, "pass")
+    bob_test = (wt_bob / "tests" / "test_login.py").read_text()
+    file_action(scn, "[wt-bob] Bob ubah docstring di ATAS file (baris berbeda dari Alice)",
+                "tests/test_login.py",
+                bob_test.replace(
+                    '"""Smoke test for the example `login-api` entry point."""',
+                    '"""Smoke test for the example `login-api` entry point.\n\nBob: docstring ini juga menjelaskan format token session-<user>.\n"""'),
+                wt_bob)
+    git(["add", "-A"], wt_bob)
+    git(["commit", "-q", "-m", "t-202: perjelas docstring tes [claim #3]"], wt_bob)
+    step(scn, "[main] sync_check --claim t-201: branch Alice merge BERSIH ke origin/main",
+         sync + ["--claim", "t-201"], main, "pass")
+    git(["fetch", "-q", "origin"], main)
+    git(["merge", "-q", "--no-ff", "wt/t-201", "-m", "merge wt/t-201 (t-201)"], main)
+    git(["push", "-q", "origin", "main"], main)
+    git(["fetch", "-q", "origin"], main)
+    step(scn, "[main] sync_check --claim t-202: branch Bob merge BERSIH setelah merge Alice",
+         sync + ["--claim", "t-202"], main, "pass",
+         "Merge satu per satu — Bob berbasis base lama, tapi editnya di baris berbeda.")
+    git(["merge", "-q", "--no-ff", "wt/t-202", "-m", "merge wt/t-202 (t-202)"], main)
+    git(["push", "-q", "origin", "main"], main)
+    step(scn, "[main] Kedua edit ADA di main — tidak ada yang tertimpa",
+         ["python3", "-c",
+          "t = open('tests/test_login.py').read(); "
+          "assert 'test_login_token_is_per_user' in t, 'edit Alice hilang'; "
+          "assert 'Bob: docstring ini juga menjelaskan format token' in t, 'edit Bob hilang'; "
+          "print('main berisi edit Alice + edit Bob')"],
+         main, "pass")
+    git(["worktree", "remove", "--force", str(wt_alice)], main)
+    git(["worktree", "remove", "--force", str(wt_bob)], main)
+
+    # --- (b) stale base: claim, advance main 25 commits, sync_check fails ---
+    step(scn, "[main] Owner klaim t-203 --worktree ../wt-carol",
+         claim + ["--task", "t-203", "--title", "Tambah tes kosong",
+                  "--owner", "owner", "--files", "tests/test_login.py",
+                  "--worktree", "../wt-carol"], main, "pass")
+    rc, out = git(["add", "team/claims/t-203.json"], main)
+    git(["commit", "-q", "-m", "claim: t-203 [claim #4]"], main)
+    git(["push", "-q", "origin", "main"], main)
+    base_commit_c = json.loads((main / "team" / "claims" / "t-203.json").read_text())["base_commit"]
+    wt_carol = base / "wt-carol"
+    step(scn, "[main] worktree_setup.sh membuat worktree Carol",
+         ["bash", str(SCRIPTS / "worktree_setup.sh"),
+          "../wt-carol", "wt/t-203", base_commit_c], main, "pass")
+    for i in range(25):
+        git(["commit", "-q", "--allow-empty", "-m", "bump %d" % (i + 1)], main)
+    git(["push", "-q", "origin", "main"], main)
+    git(["fetch", "-q", "origin"], main)
+    step(scn, "[main] sync_check --claim t-203: GAGAL — base basi 25 commit (batas 20)",
+         sync + ["--claim", "t-203"], main, "fail",
+         "Worktree yang tertinggal wajib rebase dulu ke origin/main.")
+    git(["fetch", "-q", "origin"], wt_carol)
+    git(["rebase", "-q", "origin/main"], wt_carol)
+    step(scn, "[main] Setelah rebase: sync_check --claim t-203 LOLOS",
+         sync + ["--claim", "t-203"], main, "pass")
+    git(["worktree", "remove", "--force", str(wt_carol)], main)
+    validate_end(scn, main)
+    return scn
+
+
 def main():
     WORK.mkdir(exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
-    scenarios = [s1(), s2(), s3(), s4(), s5(), s6()]
+    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7()]
     total_steps = sum(len(s["steps"]) for s in scenarios)
     gates_ok = sum(1 for s in scenarios for st in s["steps"] if st.get("gate_ok"))
     doc = {
-        "generated_by": "run_simulations.py — script ASLI TheRoster v2.2.0",
+        "generated_by": "run_simulations.py — script ASLI TheRoster v2.3.0",
         "repo": "Rifkiend/TheRoster",
         "scenarios": scenarios,
         "summary": {"scenarios": len(scenarios), "steps": total_steps,

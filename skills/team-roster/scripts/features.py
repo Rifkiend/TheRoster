@@ -117,6 +117,26 @@ def feature_path(features_dir, fid):
     return os.path.join(features_dir, fid + ".json")
 
 
+def _guard_mutation(features_dir, action):
+    """Error string when features_dir is inside a linked worktree, else None.
+
+    team/ state is only written from the main checkout (v2.3,
+    Dziatkovskii rule) — a mutation from inside a worktree lands on
+    the worktree branch and is invisible to the rest of the team."""
+    return tc.guard_team_mutation(tc.team_dir_of(features_dir), action)
+
+
+def _resolve_features_dir(features_dir):
+    """Redirect a features dir inside a linked worktree to the main
+    checkout's features dir (reads only; prints a note on stderr)."""
+    team_dir = tc.team_dir_of(features_dir)
+    team_dir, note = tc.resolve_team_dir(team_dir)
+    if note:
+        print("FEATURES: note — " + note, file=sys.stderr)
+        return os.path.join(team_dir, "features")
+    return features_dir
+
+
 def load_roster_active(roster_dir):
     if not roster_dir or not os.path.isdir(roster_dir):
         return None, "roster dir not found: %s" % roster_dir
@@ -268,6 +288,7 @@ def merge_depends_on(existing, new):
 
 
 def cmd_list(features_dir):
+    features_dir = _resolve_features_dir(features_dir)
     feats = load_features(features_dir)
     if not feats:
         print("FEATURES: registry is empty — nothing built yet. Build, then register it.")
@@ -337,6 +358,13 @@ def cmd_search(features_dir, query):
 
 
 def cmd_check(features_dir, roster_path, repo_root):
+    team_dir = tc.team_dir_of(features_dir)
+    eff_team, note = tc.resolve_team_dir(team_dir)
+    if note:
+        print("FEATURES: note — " + note, file=sys.stderr)
+        features_dir = os.path.join(eff_team, "features")
+        if roster_path and os.path.abspath(roster_path).startswith(os.path.abspath(team_dir) + os.sep):
+            roster_path = os.path.join(eff_team, "roster")
     feats = load_features(features_dir)
     errors, warnings = [], []
     roster_ids = None
@@ -484,6 +512,10 @@ def _require_breaking(args):
 
 
 def cmd_register(args):
+    guard = _guard_mutation(args.features_dir, "register a feature")
+    if guard:
+        print("FEATURES: FAIL — " + guard)
+        return 1
     features_dir = args.features_dir
     os.makedirs(features_dir, exist_ok=True)
     team_dir = tc.team_dir_of(features_dir)
@@ -600,6 +632,10 @@ def cmd_register(args):
 
 
 def cmd_use(args):
+    guard = _guard_mutation(args.features_dir, "use a feature")
+    if guard:
+        print("FEATURES: FAIL — " + guard)
+        return 1
     data, err = tc.load_json_file(feature_path(args.features_dir, args.id))
     if err or not isinstance(data, dict):
         print("FEATURES: FAIL — " + err)
@@ -624,6 +660,10 @@ def cmd_use(args):
 
 
 def cmd_improve(args):
+    guard = _guard_mutation(args.features_dir, "improve a feature")
+    if guard:
+        print("FEATURES: FAIL — " + guard)
+        return 1
     breaking, err = _require_breaking(args)
     if err:
         print("FEATURES: FAIL — " + err)
@@ -723,6 +763,10 @@ def cmd_improve(args):
 
 
 def cmd_deprecate(args):
+    guard = _guard_mutation(args.features_dir, "deprecate a feature")
+    if guard:
+        print("FEATURES: FAIL — " + guard)
+        return 1
     data, err = tc.load_json_file(feature_path(args.features_dir, args.id))
     if err or not isinstance(data, dict):
         print(f"FEATURES: FAIL — no feature with id {args.id}")
@@ -762,6 +806,10 @@ def cmd_cancel(args):
     cancellation at push time. (A worker that already holds a
     stale local claim is also stopped by sync_check, which FAILs
     when the remote cancelled a feature its claim touches.)"""
+    guard = _guard_mutation(args.features_dir, "cancel a feature")
+    if guard:
+        print("FEATURES: FAIL — " + guard)
+        return 1
     data, err = tc.load_json_file(feature_path(args.features_dir, args.id))
     if err or not isinstance(data, dict):
         print(f"FEATURES: FAIL — no feature with id {args.id}")
@@ -821,6 +869,10 @@ def cmd_cancel(args):
 
 
 def cmd_reverify(args):
+    guard = _guard_mutation(args.features_dir, "reverify a feature")
+    if guard:
+        print("FEATURES: FAIL — " + guard)
+        return 1
     data, err = tc.load_json_file(feature_path(args.features_dir, args.id))
     if err or not isinstance(data, dict):
         print(f"FEATURES: FAIL — no feature with id {args.id}")
@@ -864,6 +916,10 @@ def cmd_reverify(args):
 
 
 def cmd_promote(args):
+    guard = _guard_mutation(args.features_dir, "promote a feature")
+    if guard:
+        print("FEATURES: FAIL — " + guard)
+        return 1
     data, err = tc.load_json_file(feature_path(args.features_dir, args.id))
     if err or not isinstance(data, dict):
         print(f"FEATURES: FAIL — no feature with id {args.id}")

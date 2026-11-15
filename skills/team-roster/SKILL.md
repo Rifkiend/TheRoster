@@ -2,11 +2,11 @@
 name: team-roster
 description: Know your team before you start any job, don't collide with teammates who are already working, don't rebuild a feature that already exists — continue and improve it in place instead. v2 stores team state sharded (one file per roster member, claim, and feature under team/, plus a generated index, event log, and mailbox), enforced by a local hook plus a CI twin. Load the roster first, check the mailbox and run doctor.py, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, and improve it in place with a version bump. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, never rebuild a feature that is already in the registry, and never fork a feature to improve it.
 license: MIT
-compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, scripts/archive_events.py, scripts/prd.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state. Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
+compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, scripts/archive_events.py, scripts/prd.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state (git >= 2.38 for the v2.3 worktree merge check). Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 2.2.0
-  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place, sync-check
+  version: 2.3.0
+  tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place, sync-check, worktree
 ---
 
 # team-roster
@@ -15,6 +15,8 @@ metadata:
 > v2 stores team state **sharded**: one file per record — `team/roster/<id>.json`, `team/claims/<task-id>.json`, `team/features/<id>.json` — plus `team/config.json`, a generated `team/index.json`, an append-only `team/events.jsonl`, and `team/mailbox/<agent-id>.jsonl`. The old monolithic files (`team/roster.json`, `team/work.json`, `team/features.json`) no longer exist. **Migrating from v1: run `python3 scripts/migrate_v1_to_v2.py` once.** It moves the old files to `team/v1-backup/` and writes the sharded tree. Do not hand-edit the old files after migrating, and do not mix v1 and v2 layouts in one repo.
 
 > **v2.2.0** adds the PRD layer (`team/prd/`), feature cancellation, and contract markers + dependencies. All new fields are optional: old records are read as contract=false with no dependencies, and a team without `team/prd/` rebuilds with an empty prd list. `team/config.json` gains two knobs, both default off: `prd_required` and `strict_deps`.
+
+> **v2.3.0** adds opt-in worktree-per-claim mode (`worktree_mode: "per-claim"` in `team/config.json`, default off): a claim can name its own git worktree + branch, so two agents can edit the *same file* at the same time in isolated checkouts and merge one by one. The claim itself is STILL pushed alone to `main` first, all `team/` reads come from the main checkout, and `sync_check` becomes a merge check. See "Worktree-per-claim mode (v2.3, opt-in)" below.
 
 ## The idea in one sentence
 
@@ -57,7 +59,7 @@ cat team/mailbox/<your-roster-id>.jsonl   # read your messages first
 python3 skills/team-roster/scripts/doctor.py   # session-start self-check
 ```
 
-`doctor.py` verifies: the pre-push hook is installed and executable, `team/config.json` `skill_version` matches this skill's version (2.0.0), Python is ≥ 3.9, and the scripts compile. If it fails, fix it before doing any work — a missing hook means nothing below is enforced locally.
+`doctor.py` verifies: the pre-push hook is installed and executable, `team/config.json` `skill_version` matches this skill's version, Python is ≥ 3.9, and the scripts compile. If it fails, fix it before doing any work — a missing hook means nothing below is enforced locally.
 
 If no roster exists, STOP and say so. Offer to create one from `examples/starter-repo/`. Do not proceed by guessing the team.
 
@@ -92,6 +94,7 @@ git add team/claims/t-002.json && git commit -m "claim: t-002 kerjakan checkout 
 - Branch freshness: a claim is only valid while its branch is ≤ 20 commits behind `origin/main` or ≤ 7 days old. Past 2× that, the push is blocked until you rebase and re-search the registry against fresh `main`. `base_commit` is recorded in the claim.
 - **Handoff, not edit:** a claim transfers ONLY by creating `team/handoffs/<id>.json` (`from`, `to`, `claim_id`, `reason`, `state_summary`). Never edit the claim's `owner_id` field. Update `handoff_note` on every heartbeat so a takeover has something to take over.
 - Work on your own branch (one task = one branch). Only touch files in your claim. If you need another file, claim it first.
+- **Worktree mode (v2.3, opt-in):** when the team has `worktree_mode: "per-claim"`, claim with `--worktree <path> [--branch wt/<task-id>]` and work in that worktree instead of the shared checkout — two agents may then edit the *same file* at once, each in their own worktree. The claim is STILL pushed alone to `main` first. See "Worktree-per-claim mode (v2.3, opt-in)" below.
 
 For non-code jobs, the claim's `scope` can be `files`, `artifact`, or `area` instead of paths, with `work_type` `code|design|writing|data|ops`: `scope: {"type": "artifact", "name": "dokumen: laporan-q3"}`, `scope: {"type": "area", "name": "slot: postingan-pagi"}`, `scope: {"type": "artifact", "name": "alat: modem"}`. Same rule: one task = one owner at a time. "One task = one owner" is the invariant; "one file = one owner" is the code specialisation.
 
@@ -153,6 +156,7 @@ git push --atomic
 - If there is no remote / no remote branch yet, sync_check passes with a note: this push is the first sync, and the next AI will see it.
 - If the fetch fails (no network), sync_check only warns and passes — offline work is not blocked. But GitHub will reject your push if you are behind, so fetch as soon as you have signal.
 - If you are about to touch files someone else may have claimed, add `--files <the files> --owner <your-roster-id>`: sync_check then also fails when a remote active claim from a different owner covers one of those files.
+- **Worktree mode (v2.3):** for a worktree claim, sync_check does not check for overlapping claims — that check is meaningless across isolated checkouts. It checks the merge instead: the worktree branch must exist on this machine, match the claim, not be stale, and merge cleanly onto `origin/main`. Run it for one claim with `--claim <task-id>` before pushing the worktree branch.
 
 **Event log retention (v2.1):** `team/events.jsonl` is append-only and unbounded — about 200–400 bytes per event, so a busy team writes ~1 MB per few thousand events, kept forever in every clone, fetch, and validation scan. No check ever reads old event lines (validate.py, the hook, and sync_check all read the record files), so old months can move out of the hot log safely: run `python3 scripts/archive_events.py team` once a month (doctor.py warns when `events.jsonl` passes 1 MB). It moves past months into `team/events-archive/YYYY-MM.jsonl` — same content, still in git, still grep-able — and leaves only the current month in the hot log. Lines without a parseable timestamp are never moved, and archives are only appended to, never rewritten. Archives use the same union merge driver: add `events-archive/*.jsonl merge=union` to `team/.gitattributes` (the starter repo already has it). Never delete history to save space — archive it.
 
@@ -206,6 +210,44 @@ python3 skills/team-roster/scripts/features.py register --id login-api --name "L
 - `--depends-on id@version` records the version a feature was verified against. When a dependency bumps MAJOR, validate.py warns "needs reverify" — or FAILs when `strict_deps: true` in `team/config.json` (default: warn). `features.py reverify` refreshes the recorded versions after you read the new code. A recorded version newer than the dependency's current version FAILS (you cannot depend on a version that does not exist yet), and a dependency on an unregistered feature FAILS.
 - Search shows contracts (`[contract]`) and dependencies, so B sees before touching an entry that A owns it and who depends on it.
 
+## Worktree-per-claim mode (v2.3, opt-in)
+
+Claims fence a file, but in a shared checkout the fence is the only thing stopping two agents editing the same file at once — even when their edits would merge cleanly. A git worktree removes the shared floor: each agent gets its own checkout, on its own branch, on its own disk path. Two agents can edit the *same file* at the same time and never see each other's bytes. The merge, not the filesystem, becomes the collision point — and a merge can be checked mechanically before it lands.
+
+Opt in per team: `"worktree_mode": "per-claim"` in `team/config.json` (default `"off"` — v2.3 changes nothing for teams that don't opt in).
+
+```bash
+# 1. Claim from the MAIN checkout, naming the worktree + branch.
+python3 skills/team-roster/scripts/claim.py claim --task t-201 --title "Kerjakan checkout" --owner <your-roster-id> --files src/checkout.py --worktree ../wt-t-201 --branch wt/t-201
+# 2. Push the claim file ALONE first — the claim must be visible on main
+#    before any work starts in the worktree.
+git add team/claims/t-201.json && git commit -m "claim: t-201 kerjakan checkout [claim #N]" && git push --atomic
+# 3. Create the worktree (shared paths applied from team/config.json).
+bash skills/team-roster/scripts/worktree_setup.sh ../wt-t-201 wt/t-201 <base_commit-from-the-claim>
+# 4. Work inside ../wt-t-201. Same file as another agent? Fine — they are
+#    on a different worktree.
+# 5. Before pushing the branch: rebase if stale, then check the merge.
+python3 skills/team-roster/scripts/sync_check.py team/features team/claims --claim t-201
+# 6. Push the branch, open a PR, merge — then remove the worktree.
+git worktree remove ../wt-t-201
+```
+
+Rules:
+
+- **The claim is pushed alone first, always.** A claim board that lives only inside a worktree is invisible to the team. This is the failure Anton Dziatkovskii documented running 94 worktrees in November 2026: his claim-board file had one commit in six weeks because each worktree held its own isolated, empty copy. If the claim never reaches `main`, the worktree is invisible and the branch is lost when the worktree is deleted.
+- **All `team/` reads come from the main checkout or `origin` — never from inside a worktree.** The scripts redirect reads to the main checkout automatically (with a note) and REFUSE any mutation from inside a linked worktree — `claim.py`, `features.py`, `prd.py` all fail with "cd to the main checkout first". If you are standing in a worktree and need to claim, heartbeat, register, or cancel — `cd` to the main checkout first.
+- **Same file, different worktrees: allowed.** Two worktree claims may cover the same file only when their worktree paths differ. The merge check, not the claim check, decides whether the two edits land cleanly — merge them one by one.
+- **Same file, mixed modes: refused.** A worktree claim overlapping a shared-checkout claim (or vice versa) is a conflict. The shared-checkout agent's files live on the main disk; letting a worktree branch from under it reintroduces the race the claim system exists to prevent.
+- **Same worktree path, two claims: refused.** Two claims naming the same worktree share a checkout, so the normal overlap rule applies.
+- **The worktree path must be outside the repo** and the branch must not exist yet — a worktree claim creates a fresh branch (`wt/<task-id>` by default when `--branch` is not given). Resuming work in an existing worktree is out of scope for v2.3 — open a new claim.
+- **Stale means rebase.** More than `branch_freshness_commits` (20) behind `origin/main` → `sync_check` fails with "rebase first". A `base_commit` the repo has never seen FAILS validation — re-claim from a known base.
+- **Merge mode replaces the overlap check.** In worktree mode `sync_check` verifies: the worktree exists on this machine, its branch matches the claim, its base is known, it is not stale, and it merges cleanly onto `origin/main` (`git merge-tree --write-tree`, git ≥ 2.38; older git falls back to a trial merge). A worktree that lives on another machine is skipped with a note — the merge is then the PR's job, not the script's.
+- **Shared paths:** a fresh worktree is an empty room — no `node_modules`, no `.env`, no cache. `worktree_setup.sh` symlinks `worktree_shared_dirs` (default `node_modules`, `.cache`) from the main checkout, but only when the dir exists there AND is gitignored — a tracked dir is never symlinked. It copies `worktree_copy_files` (default `.env`, `.env.local`) — **never symlinked**: a symlink would make the worktree's env edits land on the main checkout's secrets file.
+- **Remove the worktree after the merge.** A merged worktree left behind is the next orphaned-branch incident in miniature. `git worktree remove <path>` (or `--force` after confirming the branch is merged — never `--force` on unmerged work).
+- **What it does NOT fix:** semantic conflicts (two clean merges can still break each other — review the diff), orphaned worktrees on machines the skill cannot see (the claim on `main` names the branch and path, so a human can always find and clean it up), and live presence (visibility is still bounded by fetch/push). Fan-out — running one task in N worktrees and picking the best diff — is a separate feature planned after v2.3; this mode gives it the primitives, not the runbook.
+
+Full design: `docs/v2.3-design.md`.
+
 ## Roster format
 
 See `references/roster-schema.md` for the full schema. Minimal member file (`team/roster/owner.json`):
@@ -241,7 +283,7 @@ The team's rules as data, so the hook and CI enforce the same numbers:
 {
   "canonical_remote": "origin",
   "canonical_branch": "main",
-  "skill_version": "2.2.0",
+  "skill_version": "2.3.0",
   "claim_ttl_minutes": 120,
   "heartbeat_minutes": 30,
   "grace_minutes": 15,
@@ -250,11 +292,14 @@ The team's rules as data, so the hook and CI enforce the same numbers:
   "branch_freshness_commits": 20,
   "branch_freshness_days": 7,
   "prd_required": false,
-  "strict_deps": false
+  "strict_deps": false,
+  "worktree_mode": "off",
+  "worktree_shared_dirs": ["node_modules", ".cache"],
+  "worktree_copy_files": [".env", ".env.local"]
 }
 ```
 
-The hook refuses to run if the current branch's upstream is a fork or a different remote than `canonical_remote`. `skill_version` must match this skill's version — `doctor.py` checks that at session start. The two v2.2 knobs are both default off: `prd_required` (every new claim must name a PRD item) and `strict_deps` (a dependency that bumped MAJOR since the version a feature verified against FAILS validation instead of warning). Teams opt in to the strictness they can afford.
+The hook refuses to run if the current branch's upstream is a fork or a different remote than `canonical_remote`. `skill_version` must match this skill's version — `doctor.py` checks that at session start. The two v2.2 knobs are both default off: `prd_required` (every new claim must name a PRD item) and `strict_deps` (a dependency that bumped MAJOR since the version a feature verified against FAILS validation instead of warning). Teams opt in to the strictness they can afford. The v2.3 knob `worktree_mode` is also default off: `"per-claim"` enables worktree claims (`claim.py --worktree`) and the merge mode of `sync_check`. `worktree_shared_dirs` are symlinked from the main checkout into a fresh worktree (only when gitignored there); `worktree_copy_files` are copied, never symlinked.
 
 ## What NOT to do
 
@@ -275,6 +320,8 @@ The hook refuses to run if the current branch's upstream is a fork or a differen
 - Do not skip the mailbox check at session start.
 - Do not transfer a claim by editing its owner field — create a handoff record.
 - Do not treat a timestamp without a `Z` as valid, and do not order claims by wall-clock time — use `(lamport, agent id)`.
+- Do not write `team/` state from inside a worktree — the claim board lives on `main`. The scripts refuse; `cd` to the main checkout first.
+- Do not leave a worktree behind after its branch merges — remove it, or the next agent inherits an orphaned checkout.
 
 ## References
 
@@ -285,11 +332,12 @@ The hook refuses to run if the current branch's upstream is a fork or a differen
 - `references/examples.md` — four ready teams in the sharded layout, pointing at `examples/starter-repo/`.
 - `examples/starter-repo/` — copyable starter repo: `team/` (config.json, roster/, claims/, features/, prd/, events.jsonl, mailbox/, `.gitattributes` — events.jsonl merge=union — `.gitignore` — index.json is generated, never committed) plus the entry files the example features point at: `src/auth/login.py` (+ `tests/test_login.py`) and `scripts/monitor_harga.py`. Copy with `cp -r examples/starter-repo/* .` — the entry files are deliberately included so `features.py check` passes on the copy; without them the hook blocks the first push.
 - `scripts/check_roster.py` — roster validator. Run it before push.
-- `scripts/claim.py` — claim / release / done / list / check work. Run it before touching shared work. `--prd` links a claim to a PRD item.
+- `scripts/claim.py` — claim / release / done / list / check work. Run it before touching shared work. `--prd` links a claim to a PRD item. `--worktree` (v2.3, needs `worktree_mode: "per-claim"`) records the worktree + branch a claim works in.
 - `scripts/features.py` — search / register / use / improve / deprecate / cancel / reverify / check features. Run it before building anything, and `improve` it when continuing someone else's feature.
 - `scripts/prd.py` — create / list / status / check PRD items. Run it before claiming work that comes from a PRD.
-- `scripts/sync_check.py` — fetch the remote and compare feature versions, cancelled features, and active claims before you push. Runs as part of the hook.
-- `scripts/validate.py` — cross-file schema validation for the whole `team/` tree, including PRD items and dependencies.
+- `scripts/sync_check.py` — fetch the remote and compare feature versions, cancelled features, and active claims before you push. Runs as part of the hook. In worktree mode it checks the merge instead (`--claim <task-id>` for one claim).
+- `scripts/worktree_setup.sh` — create a worktree for a worktree claim + apply the shared-paths convention (v2.3). Run from the main checkout.
+- `scripts/validate.py` — cross-file schema validation for the whole `team/` tree, including PRD items, dependencies, and worktree claim consistency (v2.3).
 - `scripts/doctor.py` — session-start self-check (hook installed, config version matches, Python ≥ 3.9, scripts compile).
 - `scripts/migrate_v1_to_v2.py` — one-time v1 → v2 migration; moves old files to `team/v1-backup/`.
 - `scripts/install-hook.sh` — installs `hooks/pre-push` into `.git/hooks/`.
