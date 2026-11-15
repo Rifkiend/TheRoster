@@ -29,6 +29,13 @@ Checks:
   warns "needs reverify" — or FAILS with strict_deps=true.
 - branch freshness of the checked-out branch: warn past the
   threshold, FAIL past 2x (config branch_freshness_commits/days).
+- worktree-per-claim consistency (v2.3): a blocking worktree claim
+  must name a branch and a base_commit the repo knows, and two
+  blocking worktree claims must not share a worktree path or a
+  branch. Two worktree claims on DIFFERENT worktrees may cover the
+  same file (the merge check, not the claim check, decides whether
+  they land cleanly). A worktree absent on THIS machine only warns —
+  the claim may live on a teammate's laptop.
 - ownership of team/ records, in the push range
   (git log <canonical_remote>/<canonical_branch>..HEAD, falling back
   to HEAD if no remote): all changed records must share one
@@ -139,6 +146,11 @@ def main():
     p.add_argument("--range", default="")
     args = p.parse_args()
     team_dir = args.team
+    # Reads come from the main checkout, never from a worktree copy
+    # (Dziatkovskii rule).
+    team_dir, redirect_note = tc.resolve_team_dir(team_dir)
+    if redirect_note:
+        print("VALIDATE: note — " + redirect_note, file=sys.stderr)
     cfg = tc.load_config(team_dir)
     errors, warnings = [], []
     roster, claims, features, prd = load_all(team_dir)
@@ -195,16 +207,28 @@ def main():
         if len(holders) < 2:
             continue
         ordered = sorted(holders, key=lambda h: tc.claim_order_key(h[1]))
-        first = ordered[0]
-        losers = ", ".join(t for t, _c, _f in ordered[1:])
-        errors.append(f"CONFLICT: file {first[2]} claimed by both {first[0]} and {losers} — "
+        # Worktree exemption (v2.3): holders on different worktrees do
+        # not conflict — only pairs sharing a checkout do.
+        pairs = [(a, b) for i, a in enumerate(ordered)
+                 for b in ordered[i + 1:]
+                 if tc.claims_share_checkout(a[1], b[1])]
+        if not pairs:
+            continue
+        first = min((a for a, _b in pairs),
+                    key=lambda h: tc.claim_order_key(h[1]))
+        losers = sorted({b[0] for _a, b in pairs})
+        errors.append(f"CONFLICT: file {first[2]} claimed by both {first[0]} and {', '.join(losers)} — "
                       f"first by (lamport, owner) is {first[0]} (lamport {first[1].get('lamport')}), "
-                      f"so {losers} must yield")
+                      f"so {', '.join(losers)} must yield")
     blocking_claims = [(t, c) for t, c in claims.items() if tc.is_blocking(c, cfg=cfg)]
     for i in range(len(blocking_claims)):
         for j in range(i + 1, len(blocking_claims)):
             t1, c1 = blocking_claims[i]
             t2, c2 = blocking_claims[j]
+            # Worktree exemption (v2.3): different worktrees never share
+            # a checkout, so prefix overlap between them is not a conflict.
+            if not tc.claims_share_checkout(c1, c2):
+                continue
             for f in c1.get("files") or []:
                 for g in c2.get("files") or []:
                     if tc.paths_overlap(f, g) and tc.canonical_path(f) != tc.canonical_path(g):
@@ -214,6 +238,47 @@ def main():
                         errors.append(f"CONFLICT: {f} ({t1}) overlaps {g} ({t2}) — one path is a prefix "
                                       f"of the other; first by (lamport, owner) is {first[1]}, "
                                       f"so {second[1]} must yield")
+    # ---- worktree-per-claim consistency (v2.3) ----------------------
+    # Only blocking claims are checked: a released/done claim's
+    # worktree fields are history, not a live promise.
+    seen_wt_path, seen_wt_branch = {}, {}
+    root = tc.git_root()
+    for tid, c in blocking_claims:
+        wt = c.get("worktree") or ""
+        br = c.get("branch") or ""
+        if not wt:
+            continue
+        label = "claim %s" % tid
+        if cfg.get("worktree_mode") != "per-claim":
+            errors.append(f"{label}: worktree claim but team/config.json worktree_mode is not 'per-claim'")
+        if not br:
+            errors.append(f"{label}: worktree claim without a branch")
+        elif not tc.valid_branch_name(br):
+            errors.append(f"{label}: branch {br!r} is not a legal git branch name")
+        if not c.get("base_commit"):
+            errors.append(f"{label}: worktree claim without a base_commit — re-claim so the base is recorded")
+        key = os.path.normpath(wt)
+        if key in seen_wt_path:
+            errors.append(f"CONFLICT: worktree path {wt} is claimed by both {seen_wt_path[key]} and {tid} — one worktree per claim")
+        else:
+            seen_wt_path[key] = tid
+        if br:
+            if br in seen_wt_branch:
+                errors.append(f"CONFLICT: branch {br} is claimed by both {seen_wt_branch[br]} and {tid} — one branch per worktree claim")
+            else:
+                seen_wt_branch[br] = tid
+        if root and c.get("base_commit"):
+            r = tc.run_git(["cat-file", "-e", c["base_commit"] + "^{commit}"], cwd=root)
+            if r.returncode != 0:
+                errors.append(f"{label}: worktree base_commit {c['base_commit']} is unknown to this repo")
+        if root:
+            abs_wt = wt if os.path.isabs(wt) else os.path.normpath(os.path.join(root, wt))
+            entry = tc.worktree_entry_for_path(root, abs_wt)
+            if entry is None and not os.path.isdir(abs_wt):
+                warnings.append(f"{label}: worktree {wt} is not present on this machine — the claim "
+                                "may live on a teammate's laptop; if it was deleted, release the claim")
+            elif entry is not None and (entry.get("branch") or "") != br:
+                errors.append(f"{label}: worktree at {wt} is on branch {entry.get('branch')}, but the claim says {br}")
     for fid, f in sorted(features.items()):
         label = "feature %s" % fid
         if f.get("owner_id") not in active_ids:

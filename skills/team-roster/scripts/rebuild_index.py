@@ -52,6 +52,9 @@ def build_index(team_dir):
             "owner_id": rec.get("owner_id", ""),
             "status": rec.get("status", ""),
             "prd_item": rec.get("prd_item", ""),
+            # v2.3: where the work happens ("" = shared checkout).
+            "branch": rec.get("branch", ""),
+            "worktree": rec.get("worktree", ""),
         })
     features = []
     for stem, (_path, rec) in tc.load_records(os.path.join(team_dir, "features")).items():

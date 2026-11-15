@@ -1,15 +1,15 @@
 # Simulations — which scenarios were tried
 
-Six scenarios, run against the **real skill scripts** (not mocks), each on a
+Seven scenarios, run against the **real skill scripts** (not mocks), each on a
 fresh copy of the starter repo. Every step records the exact command, its
-exit code, and its real output. 45 steps total; all 45 gates behaved as
-expected (9 of them are deliberate rejections — the gate working, not failing).
+exit code, and its real output. 63 steps total; all 63 gates behaved as
+expected (12 of them are deliberate rejections — the gate working, not failing).
 
 Re-run everything: `python3 simulations/run_simulations.py`
 (it writes `simulations/transcripts.json` — the full transcript this page
 summarises).
 
-## The six scenarios
+## The seven scenarios
 
 | # | Scenario | What it proves | Without TheRoster |
 |---|----------|----------------|-------------------|
@@ -19,6 +19,7 @@ summarises).
 | s4 | A feature cancelled mid-work | Cancelling releases the overlapping active claim in the same push; `sync_check` in a second clone that hasn't fetched yet refuses the push with the CANCELLED message | The owner cancels in chat; the AI never reads it, keeps working, and pushes a week's work into the bin |
 | s5 | A contract changed carelessly | Changing a contract entry without `--contract-change` + `--bump major` is refused; a major bump requires `--breaking-notes` and `--note`; `validate.py` warns that dependents need reverify; `reverify` clears it | The login entry changes silently and every caller breaks at runtime |
 | s6 | A stranger claims to be a teammate | A claim by someone not on the roster is refused; a self-asserted roster entry is refused; the same person, once human-approved, can claim work | An unknown AI joins the work with no trace of who it is or who is responsible |
+| s7 | Worktree-per-claim: two AIs, one file, no overwrite | `--worktree` with the mode off is refused; two worktree claims on different worktrees may cover the same file; the worktree claim is visible from a fresh clone (the board doesn't disappear); a mutation from inside a worktree is refused and a read from inside one is redirected to main; both edits merge one by one cleanly onto main; a 25-commit-stale base fails `sync_check` until rebased | Both edit the same file in one checkout; whoever pushes last overwrites, or the merge conflicts with no record of who did what |
 
 ## Three things the simulations clarified
 

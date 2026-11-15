@@ -1,5 +1,5 @@
 {
-  "generated_by": "run_simulations.py — script ASLI TheRoster v2.2.0",
+  "generated_by": "run_simulations.py — script ASLI TheRoster v2.3.0",
   "repo": "Rifkiend/TheRoster",
   "scenarios": [
     {
@@ -24,7 +24,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101 (assistant, until 2026-11-14T14:27:28Z): src/auth/login.py\nPick other work, or wait until their claim expires / is released.",
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101 (assistant, until 2026-11-15T11:20:18Z): src/auth/login.py\nPick other work, or wait until their claim expires / is released.",
           "note": "Satu file = satu pemilik. Klaim kedua DITOLAK sebelum kerja dimulai."
         },
         {
@@ -832,12 +832,253 @@
           }
         }
       }
+    },
+    {
+      "id": "s7",
+      "title": "Worktree-per-claim: dua AI garap file yang sama, tanpa overwrite",
+      "team": "Tim bangun website (2 AI + owner)",
+      "story": "Assistant dan teammate-1 sama-sama harus menyentuh tests/test_login.py di saat yang sama. Di checkout bersama itu tabrakan; di dua worktree, masing-masing jalan sendiri dan merge satu per satu dengan bersih. Klaimnya tetap terlihat di main — papan tidak hilang.",
+      "tanpa_roster": "Dua AI edit file yang sama di satu checkout. Yang push belakangan menimpa kerjaan yang push duluan — atau merge conflict di file yang sama, dan salah satu sisi harus resolve manual tanpa tahu mana yang benar.",
+      "steps": [
+        {
+          "label": "[s7-mode-off] --worktree dengan mode off DITOLAK",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-200 --title Mode off --owner assistant --files tests/test_login.py --worktree ../wt-off",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "CLAIM: FAIL — worktree claims need worktree_mode=\"per-claim\" in team/config.json — set it first, or claim without --worktree (shared-checkout mode)",
+          "note": "worktree_mode default off — tim harus opt-in dulu di team/config.json."
+        },
+        {
+          "label": "[main] Assistant klaim t-201 --worktree ../wt-alice (file yang sama)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-201 --title Tambah tes token per user --owner assistant --files tests/test_login.py --worktree ../wt-alice",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-201 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alice [wt/t-201]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alice wt/t-201 66c9e7809c48fd34fa14d592bf3b9ae71d925661",
+          "note": "Klaim mencatat worktree + branch (default wt/t-201) + base_commit."
+        },
+        {
+          "label": "[fresh clone] Klaim worktree t-201 TERLIHAT dari main checkout",
+          "cmd": "python3 -c import json; c = json.load(open('team/claims/t-201.json')); assert c['worktree'] == '../wt-alice' and c['branch'] == 'wt/t-201' and c['base_commit'], c; print('t-201 on main: worktree=%s branch=%s base=%s' % (c['worktree'], c['branch'], c['base_commit'][:8]))",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "t-201 on main: worktree=../wt-alice branch=wt/t-201 base=66c9e780",
+          "note": "Klaim di-push sendirian ke main DULU — papan tidak hilang (anti-jebakan Dziatkovskii)."
+        },
+        {
+          "label": "[main] worktree_setup.sh membuat worktree Alice",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-alice wt/t-201 66c9e7809c48fd34fa14d592bf3b9ae71d925661",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "HEAD is now at 66c9e78 starter + worktree_mode per-claim\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-alice on branch wt/t-201 (base 66c9e7809c48fd34fa14d592bf3b9ae71d925661)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-alice\nPreparing worktree (new branch 'wt/t-201')",
+          "note": ""
+        },
+        {
+          "label": "[wt-alice] heartbeat dari DALAM worktree DITOLAK (guard)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py heartbeat --task t-201",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "CLAIM: FAIL — refusing to mutate team/ state from inside a linked worktree (/tmp/sim-work/s7-worktree/wt-alice): team/ state is only written from the main checkout (/tmp/sim-work/s7-worktree/work-main) — cd there first",
+          "note": "Mutasi team/ state hanya dari main checkout — cd ke sana dulu."
+        },
+        {
+          "label": "[wt-alice] list dari dalam worktree: dialihkan ke main + catatan",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py list",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: 2 claim(s) recorded, 1 blocking:\n  - t-001: Buat API login — owner [claim #1] — STEALABLE (expired + heartbeat stale) — files: src/auth/login.py, tests/test_login.py\n  - t-201: Tambah tes token per user — assistant [claim #2] — active — files: tests/test_login.py — worktree ../wt-alice [wt/t-201]\nCLAIM: note — team/ state lives on the main checkout (/tmp/sim-work/s7-worktree/work-main) — reading from there, not from the worktree copy at /tmp/sim-work/s7-worktree/wt-alice",
+          "note": "Pembacaan state team/ selalu dari main checkout, bukan salinan worktree."
+        },
+        {
+          "label": "[wt-alice] Alice tambah tes baru di akhir file",
+          "cmd": "write tests/test_login.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "\"\"\"Smoke test for the example `login-api` entry point.\"\"\"\n\nimport sys, os\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), \"..\", \"src\"))\n\nfrom auth.login import login\n\n\ndef test_login_returns_a_token():\n    result = login(\"rian@example.com\", \"rahasia\")\n    assert result[\"email\"] == \"rian@example.com\"\n    assert result[\"token\"].startswith(\"session-\")\n\n\ndef test_login_rejects_empty_passwor",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "[main] Teammate-1 klaim t-202 --worktree ../wt-bob, FILE YANG SAMA",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-202 --title Perjelas docstring tes --owner teammate-1 --files tests/test_login.py --worktree ../wt-bob",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-202 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-bob [wt/t-202]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-bob wt/t-202 9f46c63d7b09cc56d565ae0bc36f055dc3fdc665",
+          "note": "Dua klaim worktree di worktree BERBEDA boleh menutupi file yang sama."
+        },
+        {
+          "label": "[main] worktree_setup.sh membuat worktree Bob",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-bob wt/t-202 9f46c63d7b09cc56d565ae0bc36f055dc3fdc665",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "HEAD is now at 9f46c63 claim: t-201 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-bob on branch wt/t-202 (base 9f46c63d7b09cc56d565ae0bc36f055dc3fdc665)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-bob\nPreparing worktree (new branch 'wt/t-202')",
+          "note": ""
+        },
+        {
+          "label": "[wt-bob] Bob ubah docstring di ATAS file (baris berbeda dari Alice)",
+          "cmd": "write tests/test_login.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "\"\"\"Smoke test for the example `login-api` entry point.\n\nBob: docstring ini juga menjelaskan format token session-<user>.\n\"\"\"\n\nimport sys, os\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), \"..\", \"src\"))\n\nfrom auth.login import login\n\n\ndef test_login_returns_a_token():\n    result = login(\"rian@example.com\", \"rahasia\")\n    assert result[\"email\"] == \"rian@example.com\"\n    assert result[\"to",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "[main] sync_check --claim t-201: branch Alice merge BERSIH ke origin/main",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-201",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "SYNC CHECK: note — worktree claim t-201: branch wt/t-201 merges cleanly onto origin/main (2 commits behind, within the 20 limit)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "note": ""
+        },
+        {
+          "label": "[main] sync_check --claim t-202: branch Bob merge BERSIH setelah merge Alice",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-202",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "SYNC CHECK: note — worktree claim t-202: branch wt/t-202 merges cleanly onto origin/main (3 commits behind, within the 20 limit)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "note": "Merge satu per satu — Bob berbasis base lama, tapi editnya di baris berbeda."
+        },
+        {
+          "label": "[main] Kedua edit ADA di main — tidak ada yang tertimpa",
+          "cmd": "python3 -c t = open('tests/test_login.py').read(); assert 'test_login_token_is_per_user' in t, 'edit Alice hilang'; assert 'Bob: docstring ini juga menjelaskan format token' in t, 'edit Bob hilang'; print('main berisi edit Alice + edit Bob')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "main berisi edit Alice + edit Bob",
+          "note": ""
+        },
+        {
+          "label": "[main] Owner klaim t-203 --worktree ../wt-carol",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-203 --title Tambah tes kosong --owner owner --files tests/test_login.py --worktree ../wt-carol",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-203 claimed by owner for 2h — files: tests/test_login.py — worktree ../wt-carol [wt/t-203]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-carol wt/t-203 9b4f4edf3b3cf2dd5b5189167cf16d57baeafe5f",
+          "note": ""
+        },
+        {
+          "label": "[main] worktree_setup.sh membuat worktree Carol",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-carol wt/t-203 9b4f4edf3b3cf2dd5b5189167cf16d57baeafe5f",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "HEAD is now at 9b4f4ed merge wt/t-202 (t-202)\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-carol on branch wt/t-203 (base 9b4f4edf3b3cf2dd5b5189167cf16d57baeafe5f)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-carol\nPreparing worktree (new branch 'wt/t-203')",
+          "note": ""
+        },
+        {
+          "label": "[main] sync_check --claim t-203: GAGAL — base basi 25 commit (batas 20)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-203",
+          "exit": 1,
+          "expected": "fail",
+          "gate_ok": true,
+          "output": "SYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-203: branch wt/t-203 is 26 commits behind origin/main (limit 20) — rebase the worktree onto origin/main first, then re-run\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "note": "Worktree yang tertinggal wajib rebase dulu ke origin/main."
+        },
+        {
+          "label": "[main] Setelah rebase: sync_check --claim t-203 LOLOS",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/sync_check.py team/features team/claims --remote origin --branch main --claim t-203",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "SYNC CHECK: note — worktree claim t-203: branch wt/t-203 merges cleanly onto origin/main (0 commits behind, within the 20 limit)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "note": ""
+        },
+        {
+          "label": "Validasi akhir semua file tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! claim t-201: worktree ../wt-alice is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! claim t-202: worktree ../wt-bob is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\n  ! claim t-203: worktree ../wt-carol is not present on this machine — the claim may live on a teammate's laptop; if it was deleted, release the claim\nVALIDATE: OK — 3 roster member(s), 4 claim(s), 2 feature(s), 1 PRD item(s) cross-checked; 12 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-201": {
+            "status": "active",
+            "version": null,
+            "owner": "assistant",
+            "released_by": null
+          },
+          "t-202": {
+            "status": "active",
+            "version": null,
+            "owner": "teammate-1",
+            "released_by": null
+          },
+          "t-203": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        },
+        "features": {
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
     }
   ],
   "summary": {
-    "scenarios": 6,
-    "steps": 45,
-    "gates_ok": 45,
+    "scenarios": 7,
+    "steps": 63,
+    "gates_ok": 63,
     "gates_failed": 0
   }
 }

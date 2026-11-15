@@ -40,7 +40,7 @@ SEMVER_RE = re.compile(
 DEFAULT_CONFIG = {
     "canonical_remote": "origin",
     "canonical_branch": "main",
-    "skill_version": "2.2.0",
+    "skill_version": "2.3.0",
     "claim_ttl_minutes": 120,
     "heartbeat_minutes": 30,
     "grace_minutes": 15,
@@ -54,6 +54,14 @@ DEFAULT_CONFIG = {
     # version it verified against FAILS validation (default: warn).
     "prd_required": False,
     "strict_deps": False,
+    # Worktree-per-claim mode (v2.3). "off" (default) keeps v2.2 behaviour;
+    # "per-claim" allows claim.py --worktree and the merge mode of sync_check.
+    "worktree_mode": "off",
+    # Dirs symlinked from the main checkout into a fresh worktree (only
+    # when they exist there AND are gitignored — never symlink tracked dirs).
+    "worktree_shared_dirs": ["node_modules", ".cache"],
+    # Files copied (never symlinked) from the main checkout into a worktree.
+    "worktree_copy_files": [".env", ".env.local"],
 }
 
 
@@ -210,23 +218,25 @@ def git_blob_sha(path, cwd=None):
     return hashlib.sha1(header + content).hexdigest()
 
 
-def branch_freshness(repo_root, remote, branch):
-    """How far the checked-out branch is behind <remote>/<branch>.
+def branch_freshness(repo_root, remote, branch, ref="HEAD"):
+    """How far `ref` is behind <remote>/<branch>.
 
     Returns (behind_commits, age_days, note). behind/age are None when
     the remote branch cannot be resolved (no remote = skip with note).
-    Age = days since the oldest commit on this branch that the remote
-    does not have; 0 when there is no such commit."""
-    ref = "%s/%s" % (remote, branch)
-    r = run_git(["rev-parse", "--verify", "--quiet", ref], cwd=repo_root)
+    Age = days since the oldest commit on `ref` that the remote does
+    not have; 0 when there is no such commit. `ref` defaults to HEAD
+    so existing callers are unchanged; worktree mode passes the
+    worktree branch name to measure that branch instead."""
+    ref_remote = "%s/%s" % (remote, branch)
+    r = run_git(["rev-parse", "--verify", "--quiet", ref_remote], cwd=repo_root)
     if r.returncode != 0:
-        return None, None, "no remote branch %s to compare against" % ref
-    r = run_git(["rev-list", "--count", "HEAD..%s" % ref], cwd=repo_root)
+        return None, None, "no remote branch %s to compare against" % ref_remote
+    r = run_git(["rev-list", "--count", "%s..%s" % (ref, ref_remote)], cwd=repo_root)
     try:
         behind = int(r.stdout.strip())
     except ValueError:
-        return None, None, "could not count commits behind %s" % ref
-    r = run_git(["log", "%s..HEAD" % ref, "--reverse", "--format=%aI", "-n", "1"],
+        return None, None, "could not count commits behind %s" % ref_remote
+    r = run_git(["log", "%s..%s" % (ref_remote, ref), "--reverse", "--format=%aI", "-n", "1"],
                 cwd=repo_root)
     first = r.stdout.strip().splitlines()
     if not first:
@@ -236,6 +246,240 @@ def branch_freshness(repo_root, remote, branch):
         return behind, 0.0, ""
     age_days = (now() - dt).total_seconds() / 86400.0
     return behind, age_days, ""
+
+
+# ---------------------------------------------------------------------------
+# Worktree helpers (v2.3)
+# ---------------------------------------------------------------------------
+
+def git_available():
+    """True when a `git` binary runs."""
+    try:
+        r = run_git(["--version"])
+    except (OSError, ValueError):
+        return False
+    return r.returncode == 0
+
+
+def valid_branch_name(name):
+    """True when `name` is a legal git branch name.
+
+    Uses `git check-ref-format --branch` when git is available (the
+    authoritative rule); falls back to the main grammar rules."""
+    if not name or not isinstance(name, str):
+        return False
+    if git_available():
+        try:
+            r = run_git(["check-ref-format", "--branch", name])
+        except (OSError, ValueError):
+            r = None
+        if r is not None:
+            return r.returncode == 0
+    # Fallback grammar (subset of git-check-ref-format rules).
+    if name.startswith(("-", ".", "/")) or name.endswith(("/", ".lock", ".")):
+        return False
+    if any(bad in name for bad in ("..", "~", "^", ":", "?", "*", "[", "\\", " ")):
+        return False
+    if "@{" in name or "//" in name:
+        return False
+    return True
+
+
+def git_worktree_list(repo_root):
+    """Parse `git worktree list --porcelain`.
+
+    Returns a list of dicts: {"path", "head", "branch" (None when
+    detached), "bare": bool}. The first entry is the main worktree
+    (unless the repo is bare). Returns [] when git or the repo is
+    unavailable."""
+    try:
+        r = run_git(["worktree", "list", "--porcelain"], cwd=repo_root)
+    except (OSError, ValueError):
+        return []
+    if r.returncode != 0:
+        return []
+    entries = []
+    current = None
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            if current:
+                entries.append(current)
+                current = None
+            continue
+        if line.startswith("worktree "):
+            current = {"path": line[len("worktree "):], "head": "",
+                       "branch": None, "bare": False}
+        elif current is not None:
+            if line.startswith("HEAD "):
+                current["head"] = line[len("HEAD "):]
+            elif line.startswith("branch "):
+                ref = line[len("branch "):]
+                current["branch"] = (ref[len("refs/heads/"):]
+                                     if ref.startswith("refs/heads/") else ref)
+            elif line == "bare":
+                current["bare"] = True
+            elif line == "detached":
+                current["branch"] = None
+    if current:
+        entries.append(current)
+    return entries
+
+
+def main_checkout_path(repo_root):
+    """Absolute path of the main checkout, or None.
+
+    The main checkout is the first non-bare entry of `git worktree list`.
+    """
+    for entry in git_worktree_list(repo_root):
+        if not entry.get("bare"):
+            return os.path.normpath(entry["path"])
+    return None
+
+
+def worktree_entry_for_path(repo_root, path):
+    """The worktree-list entry for `path`, or None when not a worktree."""
+    norm = os.path.normpath(os.path.abspath(path))
+    for entry in git_worktree_list(repo_root):
+        if os.path.normpath(entry["path"]) == norm:
+            return entry
+    return None
+
+
+def _team_dir_context(team_dir):
+    """(toplevel, main_path) for a team dir.
+
+    toplevel is the checkout that contains team_dir; main_path is the
+    main checkout of that repo. (None, None) when team_dir is not
+    inside a git repo."""
+    abs_dir = os.path.abspath(team_dir)
+    # team_dir may not exist yet (fresh repo) — probe the nearest
+    # existing ancestor so git_root still finds the repo.
+    probe = abs_dir
+    while not os.path.isdir(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return (None, None)
+        probe = parent
+    try:
+        toplevel = git_root(cwd=probe)
+    except OSError:
+        return (None, None)
+    if not toplevel:
+        return (None, None)
+    return (toplevel, main_checkout_path(toplevel))
+
+
+def team_dir_in_linked_worktree(team_dir):
+    """True when team_dir lives inside a LINKED worktree (not the main one).
+
+    This is the Dziatkovskii trap detector: team/ state read from inside
+    a worktree is a private copy, not the shared board."""
+    toplevel, main_path = _team_dir_context(team_dir)
+    if not toplevel or not main_path:
+        return False
+    return os.path.normpath(toplevel) != os.path.normpath(main_path)
+
+
+def resolve_team_dir(team_dir):
+    """Redirect a team dir inside a linked worktree to the main checkout.
+
+    Returns (effective_team_dir, note). `note` is None when no redirect
+    happened. Reads MUST use the effective dir — the worktree copy of
+    team/ is stale the moment it is branched."""
+    toplevel, main_path = _team_dir_context(team_dir)
+    if not toplevel or not main_path:
+        return (team_dir, None)
+    if os.path.normpath(toplevel) == os.path.normpath(main_path):
+        return (team_dir, None)
+    suffix = os.path.relpath(os.path.abspath(team_dir), toplevel)
+    effective = (os.path.join(main_path, suffix)
+                 if suffix != "." else main_path)
+    note = ("team/ state lives on the main checkout (%s) — reading from "
+            "there, not from the worktree copy at %s"
+            % (main_path, toplevel))
+    return (effective, note)
+
+
+def guard_team_mutation(team_dir, action="mutate team/ state"):
+    """Error message when team_dir is inside a linked worktree, else None.
+
+    Call at the top of every command that WRITES team/ state. A mutation
+    from inside a worktree lands on the worktree branch and is invisible
+    to the rest of the team until (and unless) that branch merges — the
+    exact failure Dziatkovskii documented with 94 worktrees."""
+    toplevel, main_path = _team_dir_context(team_dir)
+    if not toplevel or not main_path:
+        return None
+    if os.path.normpath(toplevel) == os.path.normpath(main_path):
+        return None
+    return ("refusing to %s from inside a linked worktree (%s): team/ "
+            "state is only written from the main checkout (%s) — "
+            "cd there first" % (action, toplevel, main_path))
+
+
+def claims_share_checkout(claim_a, claim_b):
+    """True when two claims edit files on the SAME checkout.
+
+    Two worktree claims on DIFFERENT worktrees never share a checkout,
+    so they may cover the same file. Any pair involving a shared-checkout
+    (non-worktree) claim shares the main checkout. Two claims naming the
+    SAME worktree path also share a checkout (misconfiguration — treat
+    as a conflict)."""
+    wa = (claim_a or {}).get("worktree") or ""
+    wb = (claim_b or {}).get("worktree") or ""
+    if not wa or not wb:
+        return True
+    return os.path.normpath(wa) == os.path.normpath(wb)
+
+
+def merge_check(repo_root, base_ref, branch):
+    """Does `branch` merge cleanly onto `base_ref`?
+
+    Returns (clean, conflicts, tree_sha, error). `clean` is True when
+    the merge is conflict-free, False when it conflicts, None when the
+    check could not run at all (error explains why). `conflicts` is the
+    list of conflicted paths. Uses `git merge-tree --write-tree`
+    (git >= 2.38); falls back to a trial merge in a throwaway worktree
+    when merge-tree is unavailable. Never touches the real worktree."""
+    import shutil
+    import tempfile
+    if not git_available():
+        return (None, [], None, "git not available")
+    r = run_git(["rev-parse", "--verify", "--quiet", base_ref], cwd=repo_root)
+    if r.returncode != 0:
+        return (None, [], None, "unknown base ref: %s" % base_ref)
+    r = run_git(["rev-parse", "--verify", "--quiet", branch], cwd=repo_root)
+    if r.returncode != 0:
+        return (None, [], None, "unknown branch: %s" % branch)
+    # Preferred: merge-tree (no working tree touched, no checkout needed).
+    r = run_git(["merge-tree", "--write-tree", "--name-only",
+                 base_ref, branch], cwd=repo_root)
+    if r.returncode in (0, 1):
+        lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
+        tree_sha = lines[0] if lines else None
+        conflicts = lines[1:] if r.returncode == 1 else []
+        return (r.returncode == 0, conflicts, tree_sha, None)
+    # Fallback: trial merge in a throwaway worktree of the base ref.
+    tmp = tempfile.mkdtemp(prefix="theroster-merge-check-")
+    try:
+        r2 = run_git(["worktree", "add", "--detach", tmp, base_ref],
+                     cwd=repo_root)
+        if r2.returncode != 0:
+            return (None, [], None,
+                    "merge-tree unavailable and trial worktree failed: %s"
+                    % ((r2.stderr or "").strip() or "unknown error"))
+        r3 = run_git(["merge", "--no-commit", "--no-ff", branch], cwd=tmp)
+        if r3.returncode == 0:
+            run_git(["merge", "--abort"], cwd=tmp)
+            return (True, [], None, None)
+        r4 = run_git(["diff", "--name-only", "--diff-filter=U"], cwd=tmp)
+        run_git(["merge", "--abort"], cwd=tmp)
+        conflicts = [ln for ln in r4.stdout.splitlines() if ln.strip()]
+        return (False, conflicts, None, None)
+    finally:
+        run_git(["worktree", "remove", "--force", tmp], cwd=repo_root)
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 # ---------------------------------------------------------------- claims

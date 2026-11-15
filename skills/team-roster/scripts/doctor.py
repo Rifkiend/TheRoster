@@ -26,6 +26,11 @@ Checks:
 8. team/events.jsonl size (WARN above 1 MB — the append-only log
    grows forever; past months belong in team/events-archive/,
    see scripts/archive_events.py).
+9. Worktree mode (v2.3, only when team/config.json has
+   worktree_mode="per-claim"): git >= 2.38 so `git merge-tree
+   --write-tree` exists for the sync_check merge check (WARN if
+   older — the check falls back to a trial merge), and
+   scripts/worktree_setup.sh is present (WARN if missing).
 
 Exit 0 = healthy. Exit 1 = something is wrong, with install
 instructions printed. Warnings do not fail the run.
@@ -66,6 +71,11 @@ def main():
 
     # 3. team/ dirs.
     team_dir = args.team if os.path.isabs(args.team) else os.path.join(root, args.team)
+    # Reads come from the main checkout, never from a worktree copy
+    # (Dziatkovskii rule).
+    team_dir, redirect_note = tc.resolve_team_dir(team_dir)
+    if redirect_note:
+        print("doctor: note — " + redirect_note, file=sys.stderr)
     for sub in ("roster", "claims", "features"):
         if os.path.isdir(os.path.join(team_dir, sub)):
             print(f"doctor: {os.path.join(args.team, sub)}/ OK")
@@ -158,6 +168,32 @@ def main():
                 "team/events.jsonl is %.1f MB — run python3 "
                 "scripts/archive_events.py %s to move past months into "
                 "team/events-archive/" % (size / 1_000_000, args.team))
+
+    # 9. Worktree mode (v2.3, warn only): only when the team opted in.
+    cfg_for_wt = None
+    if os.path.isfile(cfg_path):
+        cfg_for_wt, _err = tc.load_json_file(cfg_path)
+    if isinstance(cfg_for_wt, dict) and cfg_for_wt.get("worktree_mode") == "per-claim":
+        print("doctor: worktree_mode=per-claim — checking worktree support")
+        r = tc.run_git(["--version"])
+        ver = None
+        if r.returncode == 0:
+            m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", r.stdout)
+            if m:
+                ver = tuple(int(x) for x in m.groups() if x is not None)
+        if ver is None:
+            warnings.append("could not determine the git version — worktree merge checks need git >= 2.38")
+        elif ver < (2, 38):
+            warnings.append("git %s is older than 2.38 — `git merge-tree --write-tree` is unavailable; "
+                            "sync_check falls back to a trial merge, which is slower" % ".".join(map(str, ver)))
+        else:
+            print(f"doctor: git {'.'.join(map(str, ver))} supports merge-tree OK")
+        setup = os.path.join(args.skill_dir, "scripts", "worktree_setup.sh")
+        if not os.path.isfile(setup):
+            warnings.append("worktree_setup.sh not found at %s — create worktrees by hand "
+                            "(git worktree add) until it is restored" % setup)
+        else:
+            print("doctor: worktree_setup.sh present OK")
 
     for w in warnings:
         print(f"doctor: warning — {w}")

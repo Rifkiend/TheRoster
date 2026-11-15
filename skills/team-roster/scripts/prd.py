@@ -64,6 +64,26 @@ def prd_path(prd_dir, pid):
     return os.path.join(prd_dir, pid + ".json")
 
 
+def _guard_mutation(prd_dir, action):
+    """Error string when prd_dir is inside a linked worktree, else None.
+
+    team/ state is only written from the main checkout (v2.3,
+    Dziatkovskii rule) — a mutation from inside a worktree lands on
+    the worktree branch and is invisible to the rest of the team."""
+    return tc.guard_team_mutation(tc.team_dir_of(prd_dir), action)
+
+
+def _resolve_prd_dir(prd_dir):
+    """Redirect a prd dir inside a linked worktree to the main
+    checkout's prd dir (reads only; prints a note on stderr)."""
+    team_dir = tc.team_dir_of(prd_dir)
+    team_dir, note = tc.resolve_team_dir(team_dir)
+    if note:
+        print("PRD: note — " + note, file=sys.stderr)
+        return os.path.join(team_dir, "prd")
+    return prd_dir
+
+
 def load_prd(prd_dir):
     return tc.load_records(prd_dir)
 
@@ -108,6 +128,7 @@ def mutate(prd_dir, pid, actor, event, updater, extra=None):
 
 
 def cmd_list(prd_dir):
+    prd_dir = _resolve_prd_dir(prd_dir)
     items = load_prd(prd_dir)
     if not items:
         print("PRD: no items yet — create one with: python3 prd.py create --id prd-001 --title ... --owner <you>")
@@ -125,6 +146,13 @@ def cmd_list(prd_dir):
 
 
 def cmd_check(prd_dir, roster_path):
+    team_dir = tc.team_dir_of(prd_dir)
+    eff_team, note = tc.resolve_team_dir(team_dir)
+    if note:
+        print("PRD: note — " + note, file=sys.stderr)
+        prd_dir = os.path.join(eff_team, "prd")
+        if roster_path and os.path.abspath(roster_path).startswith(os.path.abspath(team_dir) + os.sep):
+            roster_path = os.path.join(eff_team, "roster")
     items = load_prd(prd_dir)
     errors, warnings = [], []
     roster_ids = None
@@ -181,6 +209,10 @@ def cmd_check(prd_dir, roster_path):
 
 
 def cmd_create(args):
+    guard = _guard_mutation(args.prd_dir, "create a PRD item")
+    if guard:
+        print("PRD: FAIL — " + guard)
+        return 1
     prd_dir = args.prd_dir
     os.makedirs(prd_dir, exist_ok=True)
     team_dir = tc.team_dir_of(prd_dir)
@@ -229,6 +261,10 @@ def cmd_create(args):
 
 
 def cmd_status(args):
+    guard = _guard_mutation(args.prd_dir, "change a PRD item's status")
+    if guard:
+        print("PRD: FAIL — " + guard)
+        return 1
     data, err = tc.load_json_file(prd_path(args.prd_dir, args.id))
     if err or not isinstance(data, dict):
         print(f"PRD: FAIL — no PRD item with id {args.id}")

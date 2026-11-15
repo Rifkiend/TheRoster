@@ -18,6 +18,12 @@ Usage:
         [--reserves-feature login-api] [--prd prd-001] [--branch feat/checkout] \
         [--hours 2] [--expected-duration 6h] \
         [--claims-dir team/claims] [--config team/config.json]
+    # Worktree-per-claim mode (v2.3, opt-in: worktree_mode="per-claim"
+    # in team/config.json). The claim records where the work happens;
+    # the claim itself is STILL pushed alone to main first.
+    python3 claim.py claim --task t-201 --title "Kerjakan checkout" \
+        --owner dev-1 --files src/checkout.py --worktree ../wt-t-201 \
+        [--branch wt/t-201]
     python3 claim.py heartbeat --task t-002 [--claims-dir team/claims]
     python3 claim.py stall     --task t-002 --by dev-2 --reason "..." [--claims-dir team/claims]
     python3 claim.py flag      --task t-002 --by dev-2 --reason "..." [--claims-dir team/claims]
@@ -53,6 +59,15 @@ Rules:
   handoff_note. Never edit owner_id by hand.
 - flag: 3 flags from distinct agents, or 1 flag from a human roster
   member, releases the claim (recorded, auditable).
+- Worktree-per-claim (v2.3, opt-in): with --worktree, the claim
+  records `worktree` (path) + `branch` + `base_commit`. The claim
+  itself is STILL pushed alone to main first — a claim board that
+  lives only inside a worktree is invisible to the team
+  (Dziatkovskii trap). Two worktree claims on DIFFERENT worktrees
+  may cover the same file; any pair involving a shared-checkout
+  claim still conflicts. Mutating team/ state from inside a linked
+  worktree is refused — cd to the main checkout first. Reads from
+  inside a worktree are redirected to the main checkout's team/.
 
 Exit 0 = ok. Exit 1 = conflict / invalid / unknown owner.
 Stdlib only, Python 3.9+.
@@ -105,21 +120,81 @@ def load_prd_item(team_dir, pid):
     return data if isinstance(data, dict) else None
 
 
-def check_conflicts(claims, files, exclude_task=None):
+def check_conflicts(claims, files, exclude_task=None, new_claim=None):
     """Returns [(claim, [overlapping files]), ...] against blocking claims,
     ordered by (lamport, owner_id) — the claim that claimed first comes
-    first, so the caller can say who must yield."""
+    first, so the caller can say who must yield.
+
+    Worktree exemption (v2.3): a new worktree claim does NOT conflict
+    with a blocking worktree claim on a DIFFERENT worktree — the two
+    agents edit isolated checkouts, so there is nothing to overwrite.
+    Any pair involving a shared-checkout claim still conflicts, and
+    two claims naming the SAME worktree path conflict too."""
     conflicts = []
     for task_id, c in sorted(claims.items(), key=lambda kv: tc.claim_order_key(kv[1])):
         if exclude_task and task_id == exclude_task:
             continue
         if not tc.is_blocking(c):
             continue
+        if new_claim is not None and not tc.claims_share_checkout(new_claim, c):
+            continue
         overlap = sorted({f for f in files for g in (c.get("files") or [])
                           if tc.paths_overlap(f, g)})
         if overlap:
             conflicts.append((c, overlap))
     return conflicts
+
+
+def resolve_claims_dir(claims_dir):
+    """Redirect a claims dir inside a linked worktree to the main checkout.
+
+    Returns (effective_claims_dir, note). Reads use the effective dir;
+    the worktree copy of team/ is stale the moment it is branched."""
+    team_dir = tc.team_dir_of(claims_dir)
+    team_dir, note = tc.resolve_team_dir(team_dir)
+    if note:
+        print("CLAIM: note — " + note, file=sys.stderr)
+        return os.path.join(team_dir, "claims"), note
+    return claims_dir, None
+
+
+def validate_worktree_args(worktree, branch, task_id, cfg, repo_root):
+    """Validate a --worktree claim. Returns (worktree, branch, error).
+
+    `worktree` is the path as given (recorded verbatim); `branch`
+    defaults to wt/<task-id> when --worktree is given without --branch.
+    Error is None on success."""
+    if not worktree:
+        return ("", branch or "", None)
+    if cfg.get("worktree_mode") != "per-claim":
+        return ("", "", "worktree claims need worktree_mode=\"per-claim\" "
+                "in team/config.json — set it first, or claim without "
+                "--worktree (shared-checkout mode)")
+    if not repo_root:
+        return ("", "", "--worktree needs a git repo (could not find the "
+                "repo root from the current directory)")
+    branch = branch or ("wt/" + task_id)
+    if not tc.valid_branch_name(branch):
+        return ("", "", "branch %r is not a legal git branch name" % branch)
+    abs_wt = (worktree if os.path.isabs(worktree)
+              else os.path.join(repo_root, worktree))
+    abs_wt = os.path.normpath(abs_wt)
+    root_norm = os.path.normpath(repo_root)
+    if abs_wt == root_norm or abs_wt.startswith(root_norm + os.sep):
+        return ("", "", "worktree path %r is inside the repo (%s) — a "
+                "worktree must live OUTSIDE the main checkout" % (worktree, root_norm))
+    if tc.worktree_entry_for_path(repo_root, abs_wt) is not None:
+        return ("", "", "worktree path %r is already a registered "
+                "worktree — use a fresh path per claim" % worktree)
+    if os.path.isdir(abs_wt) and os.listdir(abs_wt):
+        return ("", "", "worktree path %r already exists and is not empty"
+                % worktree)
+    r = tc.run_git(["show-ref", "--verify", "--quiet",
+                    "refs/heads/" + branch], cwd=repo_root)
+    if r.returncode == 0:
+        return ("", "", "branch %r already exists — a worktree claim "
+                "creates a fresh branch" % branch)
+    return (worktree, branch, None)
 
 
 def rebuild(team_dir):
@@ -133,6 +208,10 @@ def rebuild(team_dir):
 def mutate(claims_dir, task_id, actor, event, updater, extra=None):
     """Load, update (bumps lamport), save, log event, rebuild index.
     Returns (record, None) or (None, error)."""
+    team_dir = tc.team_dir_of(claims_dir)
+    guard = tc.guard_team_mutation(team_dir, "mutate team/ state")
+    if guard:
+        return None, guard
     path = claim_path(claims_dir, task_id)
     data, err = tc.load_json_file(path)
     if err:
@@ -152,6 +231,7 @@ def mutate(claims_dir, task_id, actor, event, updater, extra=None):
 # ---------------------------------------------------------------- commands
 
 def cmd_list(claims_dir):
+    claims_dir, _note = resolve_claims_dir(claims_dir)
     claims = load_claims(claims_dir)
     if not claims:
         print("CLAIM: no claims recorded yet.")
@@ -161,12 +241,15 @@ def cmd_list(claims_dir):
     for task_id in sorted(claims):
         c = claims[task_id]
         files = ", ".join(c.get("files") or []) or "(no files — %s scope)" % (c.get("scope") or {}).get("type", "?")
+        wt = c.get("worktree") or ""
+        wt_note = f" — worktree {wt} [{c.get('branch')}]" if wt else ""
         print(f"  - {task_id}: {c.get('task')} — {c.get('owner_id')} "
-              f"[claim #{c.get('claim_seq')}] — {tc.claim_status_note(c)} — files: {files}")
+              f"[claim #{c.get('claim_seq')}] — {tc.claim_status_note(c)} — files: {files}{wt_note}")
     return 0
 
 
 def cmd_check(claims_dir, roster_path, config_path):
+    claims_dir, _note = resolve_claims_dir(claims_dir)
     team_dir = tc.team_dir_of(claims_dir)
     cfg = tc.load_config(team_dir if not config_path else os.path.dirname(config_path) or ".")
     if config_path and os.path.isfile(config_path):
@@ -223,6 +306,18 @@ def cmd_check(claims_dir, roster_path, config_path):
             errors.append(f"{task_id}: area-scope claim must name the area")
         if len(c.get("files") or []) > cfg["max_files_per_claim"]:
             errors.append(f"{task_id}: {len(c['files'])} files exceeds max_files_per_claim={cfg['max_files_per_claim']}")
+        # Worktree-per-claim consistency (v2.3).
+        wt = c.get("worktree") or ""
+        if wt:
+            if cfg.get("worktree_mode") != "per-claim":
+                errors.append(f"{task_id}: worktree claim but team/config.json worktree_mode is not "
+                              "'per-claim' — enable it, or re-claim without --worktree")
+            if not c.get("branch"):
+                errors.append(f"{task_id}: worktree claim without a branch")
+            if not c.get("base_commit"):
+                errors.append(f"{task_id}: worktree claim without a base_commit — re-claim so the base is recorded")
+            if c.get("branch") and not tc.valid_branch_name(c["branch"]):
+                errors.append(f"{task_id}: branch {c['branch']!r} is not a legal git branch name")
         for f in c.get("files") or []:
             err = tc.path_syntax_error(f)
             if err:
@@ -230,7 +325,9 @@ def cmd_check(claims_dir, roster_path, config_path):
             low = tc.canonical_path(f)
             if low in seen_lower and tc.is_blocking(c):
                 other_id, other_claim = seen_lower[low]
-                if other_id != task_id:
+                # Worktree exemption (v2.3): two worktree claims on
+                # different worktrees may cover the same file.
+                if other_id != task_id and tc.claims_share_checkout(c, other_claim):
                     # "First" is decided by (lamport, owner_id), never
                     # by wall-clock — a skewed clock can be minutes in
                     # the future. The later claim must yield.
@@ -259,6 +356,10 @@ def cmd_check(claims_dir, roster_path, config_path):
         for j in range(i + 1, len(blocking)):
             t1, c1 = blocking[i]
             t2, c2 = blocking[j]
+            # Worktree exemption (v2.3): different worktrees never share
+            # a checkout, so prefix overlap between them is not a conflict.
+            if not tc.claims_share_checkout(c1, c2):
+                continue
             for f in c1.get("files") or []:
                 for g in c2.get("files") or []:
                     if tc.paths_overlap(f, g) and tc.canonical_path(f) != tc.canonical_path(g):
@@ -268,6 +369,31 @@ def cmd_check(claims_dir, roster_path, config_path):
                         errors.append(f"CONFLICT: {f} ({t1}) overlaps {g} ({t2}) — one path is a prefix "
                                       f"of the other; first by (lamport, owner) is {first[1]}, "
                                       f"so {second[1]} must yield")
+    # Two blocking worktree claims must not share a worktree path or a branch.
+    seen_wt_path, seen_wt_branch = {}, {}
+    for t, c in blocking:
+        wt = c.get("worktree") or ""
+        br = c.get("branch") or ""
+        if wt:
+            key = os.path.normpath(wt)
+            if key in seen_wt_path:
+                errors.append(f"CONFLICT: worktree path {wt} is claimed by both {seen_wt_path[key]} and {t} — one worktree per claim")
+            else:
+                seen_wt_path[key] = t
+        if wt and br:
+            if br in seen_wt_branch:
+                errors.append(f"CONFLICT: branch {br} is claimed by both {seen_wt_branch[br]} and {t} — one branch per worktree claim")
+            else:
+                seen_wt_branch[br] = t
+    # A worktree claim's base_commit must be a commit this repo knows.
+    root = tc.git_root()
+    if root:
+        for t, c in blocking:
+            if (c.get("worktree") or "") and c.get("base_commit"):
+                r = tc.run_git(["cat-file", "-e", c["base_commit"] + "^{commit}"], cwd=root)
+                if r.returncode != 0:
+                    errors.append(f"{t}: worktree claim base_commit {c['base_commit']} is unknown to this "
+                                  "repo — rebase the worktree onto a known base and re-claim")
     # Branch freshness of the checked-out branch: warn past the
     # threshold, FAIL past 2x, until rebase + re-search.
     root = tc.git_root()
@@ -300,8 +426,12 @@ def cmd_check(claims_dir, roster_path, config_path):
 
 def cmd_claim(args):
     claims_dir = args.claims_dir
-    os.makedirs(claims_dir, exist_ok=True)
     team_dir = tc.team_dir_of(claims_dir)
+    guard = tc.guard_team_mutation(team_dir, "create a claim")
+    if guard:
+        print("CLAIM: FAIL — " + guard)
+        return 1
+    os.makedirs(claims_dir, exist_ok=True)
     cfg = tc.load_config(team_dir if not args.config else os.path.dirname(args.config) or ".")
     if args.config and os.path.isfile(args.config):
         cfg = tc.load_config(os.path.dirname(args.config) or ".")
@@ -356,6 +486,14 @@ def cmd_claim(args):
         print("CLAIM: FAIL — team/config.json has prd_required=true: give --prd <item-id> "
               "(create the item first with prd.py)")
         return 1
+    # Worktree-per-claim (v2.3): validates the mode, the branch name,
+    # and the path (outside the repo, fresh branch, unused path).
+    repo_root = tc.git_root()
+    worktree, branch, werr = validate_worktree_args(
+        args.worktree, args.branch, args.task, cfg, repo_root)
+    if werr:
+        print("CLAIM: FAIL — " + werr)
+        return 1
     roster_dir = args.roster or os.path.join(team_dir, "roster")
     active, _humans, rerr = load_roster_active(roster_dir)
     if rerr:
@@ -373,7 +511,11 @@ def cmd_claim(args):
             print(f"CLAIM: FAIL — {args.task} is already actively claimed by {existing.get('owner_id')}")
             return 1
         # Renewal: same task re-claims (extend expiry, update files).
-        conflicts = check_conflicts(claims, files, exclude_task=args.task)
+        # The effective worktree is the new one when --worktree is
+        # given, else the claim's existing worktree (if any).
+        renew_wt = worktree if args.worktree else (existing.get("worktree") or "")
+        conflicts = check_conflicts(claims, files, exclude_task=args.task,
+                                    new_claim={"worktree": renew_wt})
         if conflicts:
             print("CLAIM: FAIL — someone else is already working on this:")
             for c, overlap in conflicts:
@@ -383,7 +525,10 @@ def cmd_claim(args):
             c["files"] = files
             c["scope"] = scope
             c["work_type"] = args.work_type
-            c["branch"] = args.branch or c.get("branch", "")
+            c["branch"] = branch or c.get("branch", "")
+            if args.worktree:
+                c["worktree"] = worktree
+                c["base_commit"] = tc.git_head_commit()
             c["heartbeat_at"] = tc.now_iso()
             c["expires_at"] = tc.to_utc_z(tc.now() + tc.timedelta(minutes=int(cfg["claim_ttl_minutes"] if args.hours is None else args.hours * 60)))
             if args.expected_duration:
@@ -402,7 +547,7 @@ def cmd_claim(args):
         print(f"CLAIM: FAIL — {args.owner} already has {active_count} active claims "
               f"(max_claims_per_agent={cfg['max_claims_per_agent']})")
         return 1
-    conflicts = check_conflicts(claims, files)
+    conflicts = check_conflicts(claims, files, new_claim={"worktree": worktree})
     if conflicts:
         print("CLAIM: FAIL — someone else is already working on this:")
         for c, overlap in conflicts:
@@ -425,7 +570,8 @@ def cmd_claim(args):
         "files": files,
         "scope": scope,
         "work_type": args.work_type,
-        "branch": args.branch or "",
+        "branch": branch,
+        "worktree": worktree,
         "base_commit": tc.git_head_commit(),
         "started_at": tc.to_utc_z(start),
         "expires_at": tc.to_utc_z(start + tc.timedelta(hours=hours)),
@@ -444,9 +590,12 @@ def cmd_claim(args):
     tc.append_event(team_dir, "claim_created", 1, args.owner,
                     base_commit=tc.git_head_commit(), task_id=args.task)
     rebuild(team_dir)
-    print(f"CLAIM: OK — {args.task} claimed by {args.owner} for {hours}h — files: {', '.join(files) or '(none — ' + scope['type'] + ' scope)'}")
+    wt_note = f" — worktree {worktree} [{branch}]" if worktree else ""
+    print(f"CLAIM: OK — {args.task} claimed by {args.owner} for {hours}h — files: {', '.join(files) or '(none — ' + scope['type'] + ' scope)'}{wt_note}")
     print(f"Commit trailer to use on every commit touching these files: [claim #{seq}]")
     print("Remember: commit + push the claim file ALONE first, before any work commits.")
+    if worktree:
+        print(f"Then create the worktree: bash scripts/worktree_setup.sh {worktree} {branch} {record['base_commit']}")
     return 0
 
 
@@ -623,6 +772,10 @@ def main():
     sp.add_argument("--reserves-feature", default="")
     sp.add_argument("--prd", default="")
     sp.add_argument("--branch", default="")
+    sp.add_argument("--worktree", default="",
+                    help="worktree-per-claim (v2.3, needs worktree_mode='per-claim'): "
+                         "path of the worktree this claim works in, outside the repo; "
+                         "branch defaults to wt/<task-id>")
     sp.add_argument("--hours", type=float, default=None)
     sp.add_argument("--expected-duration", default="")
     sp.add_argument("--claims-dir", default="team/claims")

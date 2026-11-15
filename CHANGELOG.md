@@ -5,6 +5,22 @@ The idea behind every version is the same: make it easier for a team of
 humans and disconnected AIs to work together without inventing teammates,
 colliding with each other, or rebuilding the same thing twice.
 
+## v2.3.0 — 2026-11-15: worktree-per-claim mode (opt-in)
+
+Two agents can now edit the *same file* at the same time — each in its
+own git worktree, on its own branch — and merge one by one. The merge,
+not the filesystem, becomes the collision point, and the merge is
+checked mechanically before it lands. Design note: `docs/v2.3-design.md`.
+Opt-in only: `worktree_mode` defaults to `"off"`, and v2.3 changes
+nothing for teams that don't enable it.
+
+- **Worktree-per-claim.** `claim.py claim --worktree <path> [--branch wt/<task-id>]` records `worktree` + `branch` + `base_commit` on the claim. New `scripts/worktree_setup.sh` creates the worktree (`git worktree add -b`) and applies the shared-paths convention: symlink `worktree_shared_dirs` (default `node_modules`, `.cache`) from the main checkout — only when the dir exists there AND is gitignored — and copy `worktree_copy_files` (default `.env`, `.env.local`), never symlink. `team/config.json` gains `worktree_mode`, `worktree_shared_dirs`, `worktree_copy_files`.
+- **The Dziatkovskii rule (the one rule that matters).** The claim itself is STILL pushed alone to `main` first — a claim board that lives only inside a worktree is invisible to the team (Anton Dziatkovskii's 94-worktree incident, November 2026: his board file had one commit in six weeks because each worktree held its own isolated, empty copy). All reads of `team/` state resolve to the main checkout (`team_common.resolve_team_dir()`), and every script that writes `team/` state — `claim.py`, `features.py`, `prd.py` — refuses to run from inside a linked worktree (`guard_team_mutation()`).
+- **Conflict exemption.** Two worktree claims on DIFFERENT worktrees may cover the same file (in `claim.py`, `validate.py`, and the `sync_check` overlap check); any pair involving a shared-checkout claim still conflicts, and two claims naming the same worktree path conflict too.
+- **sync_check becomes a merge check.** In worktree mode it verifies the worktree exists on this machine, its branch matches the claim, its base is known, it is not stale (> `branch_freshness_commits` behind `origin/main` → rebase first), and it merges cleanly onto `origin/main` (`git merge-tree --write-tree`, git ≥ 2.38, trial-merge fallback). `--claim <task-id>` checks one claim. A worktree on another machine is skipped with a note — the merge is then the PR's job.
+- **Validation + doctor.** `validate.py` fails a blocking worktree claim with a missing branch/base_commit, an unknown base_commit, a branch mismatch with the worktree on disk, or a worktree path/branch shared with another blocking claim; a worktree absent on this machine only warns. `doctor.py` adds worktree checks when the mode is on (git ≥ 2.38, `worktree_setup.sh` present). `rebuild_index.py` carries `branch` + `worktree` on claim entries.
+- **What this does NOT fix (still honest).** No semantic conflicts (two clean merges can still break each other — review the diff). No orphaned worktrees on machines the skill cannot see (the claim on `main` names the branch and path, so a human can find and clean up — but the cleanup is manual). No live presence. No fan-out yet — running one task in N worktrees and picking the best diff is planned after v2.3; this release gives it the primitives (worktree claims + merge checks), not the runbook.
+
 ## v2.2.0 — 2026-11-14: PRD layer, feature cancellation, contracts + dependencies
 
 Every new power in this release ships with its failure mode named, a mitigation, and a control knob — design note: `docs/v2.2-design.md`. All changes are backward-compatible: old records are read as contract=false with no dependencies, and a team without `team/prd/` rebuilds with an empty prd list. **One real bug was found while testing this release and fixed here:** `team_common.team_dir_of()` did not know the `team/prd/` subdir, so `prd.py status --to done` looked for features in `team/prd/features/` and reported every feature as unregistered.

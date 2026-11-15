@@ -57,6 +57,39 @@ Sharding menghilangkan conflict di file klaim, tapi dua file masih dibagi semua 
 - **No self-registration:** entri roster yang ditambahkan di push yang sama dengan kerjaan yang diotorisasi entri itu ditolak.
 - `team/claims/` bukan tempat diskusi. Hanya fakta: siapa, task apa, file apa, dari kapan sampai kapan, branch apa, status apa.
 
+## Worktree-per-claim (v2.3, opt-in)
+
+Klaim memagari file, tapi di checkout bersama pagar itu satu-satunya yang menghentikan dua AI mengedit file yang sama — padahal edit mereka mungkin merge dengan bersih. Git worktree menghilangkan lantai bersama: tiap agent dapat checkout sendiri, di branch sendiri, di path disk sendiri. Dua agent bisa edit file yang *sama* bersamaan tanpa pernah melihat byte satu sama lain. Merge — bukan filesystem — yang jadi titik tabrakan, dan merge bisa dicek mesin sebelum mendarat.
+
+Aktifkan per tim: `"worktree_mode": "per-claim"` di `team/config.json` (default `"off"`).
+
+Alurnya (dari checkout MAIN):
+
+```bash
+python3 skills/team-roster/scripts/claim.py claim --task t-201 --title "..." --owner <id> --files src/x.py --worktree ../wt-t-201 --branch wt/t-201
+git add team/claims/t-201.json && git commit -m "claim: t-201 ... [claim #N]" && git push --atomic   # klaim SENDIRI dulu
+bash skills/team-roster/scripts/worktree_setup.sh ../wt-t-201 wt/t-201 <base_commit-dari-klaim>
+# ... kerja di dalam ../wt-t-201 ...
+python3 skills/team-roster/scripts/sync_check.py team/features team/claims --claim t-201   # cek merge sebelum push branch
+# push branch, buka PR, merge, lalu:
+git worktree remove ../wt-t-201
+```
+
+Aturan yang tidak boleh dilanggar:
+
+- **Klaim di-push sendirian dulu, selalu.** Papan klaim yang cuma hidup di dalam worktree tidak terlihat tim. Ini kegagalan yang didokumentasikan Anton Dziatkovskii saat menjalankan 94 worktree (November 2026): file papan klaimnya cuma punya satu commit dalam enam minggu, karena tiap worktree memegang salinan papan yang terisolasi dan kosong. Kalau klaim tidak pernah sampai ke `main`, worktree-nya tidak terlihat dan branch-nya hilang saat worktree dihapus.
+- **Semua pembacaan `team/` berasal dari main checkout atau `origin` — tidak pernah dari dalam worktree.** Script mengalihkan pembacaan ke main checkout secara otomatis (dengan catatan) dan MENOLAK mutasi apa pun dari dalam worktree yang terhubung — `claim.py`, `features.py`, `prd.py` semuanya gagal dengan pesan "cd ke main checkout dulu".
+- **File sama, worktree beda: boleh.** Dua klaim worktree boleh menutupi file yang sama hanya kalau path worktree-nya berbeda. Cek merge — bukan cek klaim — yang memutuskan apakah kedua edit mendarat bersih; merge satu per satu.
+- **File sama, mode campur: ditolak.** Klaim worktree yang overlap dengan klaim checkout-bersama (atau sebaliknya) adalah conflict.
+- **Path worktree harus di luar repo**, branch harus baru (default `wt/<task-id>`). Klaim worktree membuat branch baru; melanjutkan kerja di worktree yang sudah ada bukan cakupan v2.3 — buka klaim baru.
+- **Basi berarti rebase.** Lebih dari `branch_freshness_commits` (20) di belakang `origin/main` → `sync_check` gagal dengan pesan "rebase dulu". `base_commit` yang tidak dikenal repo GAGAL validasi.
+- **Shared paths:** worktree baru adalah ruangan kosong. `worktree_setup.sh` me-symlink `worktree_shared_dirs` (default `node_modules`, `.cache`) dari main checkout — hanya kalau direktorinya ada di sana DAN gitignored. Ia me-copy `worktree_copy_files` (default `.env`, `.env.local`) — **tidak pernah di-symlink**, karena symlink membuat edit env di worktree mendarat di file secrets main checkout.
+- **Hapus worktree setelah merge.** Worktree yang sudah di-merge tapi dibiarkan adalah insiden branch yatim berikutnya.
+
+Yang TIDAK dijamin mode ini: conflict semantik (dua merge bersih tetap bisa saling merusak — baca diff-nya), worktree yatim di mesin yang tidak terlihat skill ini (klaim di `main` menyebut branch dan path-nya, jadi manusia selalu bisa menemukan dan membersihkannya), dan live presence. Fan-out — menjalankan satu task di N worktree lalu memilih diff terbaik — adalah fitur terpisah setelah v2.3.
+
+Desain lengkap: `docs/v2.3-design.md`.
+
 ## Kalau dua AI klaim barengan?
 
 Itu bisa terjadi — dua AI fetch di saat yang sama, sama-sama lihat file kosong, sama-sama klaim. Git yang jadi wasitnya:
