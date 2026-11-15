@@ -11,7 +11,7 @@
 
   <!-- version pill -->
   <rect x="80" y="246" width="252" height="40" rx="20" fill="none" stroke="#30363d" stroke-width="1"/>
-  <text x="206" y="272" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" letter-spacing="2" fill="#8b949e" text-anchor="middle">AGENT SKILLS · v2.3.0</text>
+  <text x="206" y="272" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" letter-spacing="2" fill="#8b949e" text-anchor="middle">AGENT SKILLS · v2.3.1</text>
 
   <!-- right: roster motif -->
   <line x1="920" y1="150" x2="1210" y2="150" stroke="#30363d" stroke-width="2"/>

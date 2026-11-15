@@ -40,7 +40,7 @@ SEMVER_RE = re.compile(
 DEFAULT_CONFIG = {
     "canonical_remote": "origin",
     "canonical_branch": "main",
-    "skill_version": "2.3.0",
+    "skill_version": "2.3.1",
     "claim_ttl_minutes": 120,
     "heartbeat_minutes": 30,
     "grace_minutes": 15,
@@ -285,6 +285,77 @@ def valid_branch_name(name):
     return True
 
 
+def canonical_worktree_path(path, repo_root=None):
+    """Canonical form of a worktree path, for comparison.
+
+    Two spellings of the SAME directory — relative vs absolute,
+    `../wt-x` vs `/abs/path/wt-x`, a symlinked parent — must compare
+    equal, or two claims can silently land in the same worktree
+    (v2.3.0 defect E3c: `../wt-alias` vs its absolute spelling were
+    accepted as two different worktrees). `realpath` resolves
+    symlinks in the part of the path that exists and normalises the
+    rest lexically, so it also works in the claim-before-setup window
+    when the directory does not exist yet. Relative paths are
+    recorded against the main checkout root, so that is the base —
+    never the caller's cwd (a script run from inside a linked
+    worktree would resolve them against the wrong checkout).
+    Returns "" for an empty path."""
+    p = str(path or "")
+    if not p:
+        return ""
+    if not os.path.isabs(p):
+        base = repo_root or os.getcwd()
+        p = os.path.join(base, p)
+    return os.path.realpath(p)
+
+
+def worktree_branch_exists(repo_root, branch):
+    """True when `branch` exists as a LOCAL branch in this repo."""
+    if not branch or not repo_root:
+        return False
+    r = run_git(["show-ref", "--verify", "--quiet",
+                 "refs/heads/" + branch], cwd=repo_root)
+    return r.returncode == 0
+
+
+def worktree_presence(repo_root, worktree, branch):
+    """Where is a worktree claim's worktree? Returns one of:
+
+    - "present": registered in `git worktree list` on this machine.
+    - "deleted-here": no entry, but the claim's branch still exists
+      as a LOCAL branch — the worktree lived on this machine and was
+      removed (a worktree on a teammate's machine never creates a
+      local branch here, so this is not them).
+    - "absent": no entry and no local branch — the worktree may live
+      on a teammate's machine, or was never set up.
+    - "unknown": repo_root is None (cannot tell — caller must skip).
+    """
+    if not repo_root:
+        return "unknown"
+    if worktree_entry_for_path(repo_root, worktree) is not None:
+        return "present"
+    if branch and worktree_branch_exists(repo_root, branch):
+        return "deleted-here"
+    return "absent"
+
+
+def worktree_dirty_status(worktree_path):
+    """Uncommitted changes in a worktree, via `git status --porcelain`.
+
+    Returns (dirty, lines, error). `dirty` is True when there are
+    uncommitted changes — tracked modifications, staged changes, or
+    untracked files. `error` is set when git could not run there.
+    A merge check only looks at commits, so uncommitted work is
+    invisible to it: callers must fail before claiming a merge is
+    clean (v2.3.0 gap E5)."""
+    r = run_git(["status", "--porcelain"], cwd=worktree_path)
+    if r.returncode != 0:
+        return (False, [], "could not run git status in %s: %s"
+                % (worktree_path, (r.stderr or "").strip() or "unknown error"))
+    lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
+    return (bool(lines), lines, None)
+
+
 def git_worktree_list(repo_root):
     """Parse `git worktree list --porcelain`.
 
@@ -338,10 +409,14 @@ def main_checkout_path(repo_root):
 
 
 def worktree_entry_for_path(repo_root, path):
-    """The worktree-list entry for `path`, or None when not a worktree."""
-    norm = os.path.normpath(os.path.abspath(path))
+    """The worktree-list entry for `path`, or None when not a worktree.
+
+    Compared on canonical paths (v2.3.1): a registered worktree
+    spelled differently from the claim (`../wt-x` vs its absolute
+    path) is still the same worktree."""
+    norm = canonical_worktree_path(path, repo_root)
     for entry in git_worktree_list(repo_root):
-        if os.path.normpath(entry["path"]) == norm:
+        if canonical_worktree_path(entry["path"], repo_root) == norm:
             return entry
     return None
 
@@ -418,19 +493,23 @@ def guard_team_mutation(team_dir, action="mutate team/ state"):
             "cd there first" % (action, toplevel, main_path))
 
 
-def claims_share_checkout(claim_a, claim_b):
+def claims_share_checkout(claim_a, claim_b, repo_root=None):
     """True when two claims edit files on the SAME checkout.
 
     Two worktree claims on DIFFERENT worktrees never share a checkout,
     so they may cover the same file. Any pair involving a shared-checkout
     (non-worktree) claim shares the main checkout. Two claims naming the
     SAME worktree path also share a checkout (misconfiguration — treat
-    as a conflict)."""
+    as a conflict). Paths are compared canonically (v2.3.1): `../wt-x`
+    and its absolute spelling are the same worktree, even when the
+    directory does not exist yet — relative paths resolve against
+    repo_root (the main checkout root), never the caller's cwd."""
     wa = (claim_a or {}).get("worktree") or ""
     wb = (claim_b or {}).get("worktree") or ""
     if not wa or not wb:
         return True
-    return os.path.normpath(wa) == os.path.normpath(wb)
+    return (canonical_worktree_path(wa, repo_root)
+            == canonical_worktree_path(wb, repo_root))
 
 
 def merge_check(repo_root, base_ref, branch):

@@ -40,6 +40,10 @@ claim's branch, not be stale (> branch_freshness_commits behind
 origin/main), and merge cleanly onto origin/main. A worktree that
 lives on another machine is skipped with a note (the merge is then
 the PR's job). --claim limits the merge checks to one claim.
+Hardened in v2.3.1: a worktree that is gone but whose branch still
+exists here FAILS (deleted on this machine — release the claim or
+recreate it), and a worktree with uncommitted changes FAILS (the
+merge check only sees commits).
 Stdlib only, Python 3.9+.
 """
 import argparse
@@ -82,6 +86,10 @@ def main():
     cfg = tc.load_config(team_dir)
     branch = args.branch or cfg["canonical_branch"]
     remote = args.remote or cfg["canonical_remote"]
+    # Main checkout root: relative worktree paths are recorded against
+    # it, so it is the base for every canonical path comparison.
+    root = tc.git_root()
+    main_root = (tc.main_checkout_path(root) or root) if root else None
 
     # Reads of team/ state come from the main checkout, never from a
     # worktree copy (Dziatkovskii rule). The REMOTE paths below keep
@@ -197,9 +205,10 @@ def main():
             if not mine:
                 # Worktree exemption (v2.3): a remote worktree claim does
                 # not block local work in a DIFFERENT worktree — the two
-                # agents edit isolated checkouts.
+                # agents edit isolated checkouts. Paths compare
+                # canonically (v2.3.1).
                 isolated = any(
-                    not tc.claims_share_checkout(c, rc)
+                    not tc.claims_share_checkout(c, rc, main_root)
                     and any(tc.paths_overlap(f, g) for f in (c.get("files") or []) for g in overlap)
                     for c in local_claims.values() if tc.is_blocking(c, cfg=cfg))
                 if not isolated:
@@ -210,9 +219,13 @@ def main():
     # 3. Worktree merge checks (v2.3, only when worktree_mode is on):
     # a worktree claim's branch must merge cleanly onto origin/main.
     # The overlap check above is meaningless across isolated checkouts;
-    # the merge check replaces it.
+    # the merge check replaces it. Hardened in v2.3.1 (E2, E5): a
+    # worktree that is gone but whose branch still exists here FAILS
+    # (it was deleted on this machine — release the claim or recreate
+    # it), and a worktree with uncommitted changes FAILS (the merge
+    # check only sees commits, so "Safe to push" must never print
+    # while work is still uncommitted).
     if cfg.get("worktree_mode") == "per-claim":
-        root = tc.git_root()
         for tid, lc in sorted(local_claims.items()):
             if not tc.is_blocking(lc, cfg=cfg):
                 continue
@@ -229,15 +242,31 @@ def main():
             if not root:
                 notes.append("worktree claim %s: not in a git repo here — merge check skipped" % tid)
                 continue
-            abs_wt = wt if os.path.isabs(wt) else os.path.normpath(os.path.join(root, wt))
-            entry = tc.worktree_entry_for_path(root, abs_wt)
+            abs_wt = tc.canonical_worktree_path(wt, main_root)
+            entry = tc.worktree_entry_for_path(main_root, abs_wt)
             if entry is None:
-                notes.append("worktree claim %s: worktree %s is not present on this machine — "
-                             "merge check skipped here; the merge is the PR's job" % (tid, wt))
+                if tc.worktree_branch_exists(main_root, wbranch):
+                    errors.append("worktree claim %s: worktree %s is gone but branch %s still exists here — "
+                                  "the worktree was removed; release the claim or recreate the worktree" % (tid, wt, wbranch))
+                else:
+                    notes.append("worktree claim %s: worktree %s is not present on this machine — "
+                                 "merge check skipped here; the merge is the PR's job" % (tid, wt))
                 continue
             if (entry.get("branch") or "") != wbranch:
                 errors.append("worktree claim %s: worktree at %s is on branch %s, but the claim "
                               "says %s — fix the claim or the worktree" % (tid, wt, entry.get("branch"), wbranch))
+                continue
+            dirty, dirty_lines, derr = tc.worktree_dirty_status(abs_wt)
+            if derr:
+                notes.append("worktree claim %s: could not check for uncommitted changes (%s) — "
+                             "verify the worktree before pushing" % (tid, derr))
+            elif dirty:
+                shown = ", ".join(dirty_lines[:5])
+                if len(dirty_lines) > 5:
+                    shown += " (+%d more)" % (len(dirty_lines) - 5)
+                errors.append("worktree claim %s: worktree %s has uncommitted changes — commit them first; "
+                              "the merge check only sees commits, so this work is not part of the merge: %s"
+                              % (tid, wt, shown))
                 continue
             r = tc.run_git(["cat-file", "-e", base + "^{commit}"], cwd=root)
             if r.returncode != 0:
