@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- TheRoster workflow flowchart — v2.0.0 (sharded team state).
-     Draft prepared 2026-11-14. Replaces the v1.x flowchart in docs/flowchart.svg.
+<!-- TheRoster workflow flowchart — v2.6.0 (Orca features: fan-out, decision
+     gates, typed completion receipts, formal reviews).
+     Draft prepared 2026-11-15. Replaces the v2.0.0 flowchart in docs/flowchart.svg.
      Style: minimalist n8n-like — white cards, thin grey border, generous spacing.
      Hand-written SVG (no matplotlib bloat) so it stays light on GitHub mobile. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1330" viewBox="0 0 900 1330">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1780" viewBox="0 0 900 1780">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#a3a3a3"/>
     </marker>
   </defs>
-  <rect width="900" height="1330" fill="#ffffff"/>
+  <rect width="900" height="1780" fill="#ffffff"/>
 
   <!-- ===== connectors (drawn first, under cards) ===== -->
   <g fill="none" stroke="#a3a3a3" stroke-width="1.2">
@@ -17,46 +18,64 @@
     <line x1="450" y1="202" x2="450" y2="230" marker-end="url(#arrow)"/>
     <line x1="450" y1="296" x2="450" y2="324" marker-end="url(#arrow)"/>
     <line x1="450" y1="410" x2="450" y2="438" marker-end="url(#arrow)"/>
-    <line x1="450" y1="524" x2="450" y2="552" marker-end="url(#arrow)"/>
-    <line x1="450" y1="618" x2="450" y2="646" marker-end="url(#arrow)"/>
+    <line x1="450" y1="542" x2="450" y2="568" marker-end="url(#arrow)"/>
+    <line x1="450" y1="634" x2="450" y2="662" marker-end="url(#arrow)"/>
     <!-- fan-out: search -> three branches -->
-    <path d="M 450 732 C 450 752, 130 752, 130 770" marker-end="url(#arrow)"/>
-    <line x1="450" y1="732" x2="450" y2="770" marker-end="url(#arrow)"/>
-    <path d="M 450 732 C 450 752, 770 752, 770 770" marker-end="url(#arrow)"/>
-    <!-- merge: branches -> sync -->
-    <line x1="130" y1="860" x2="130" y2="895"/>
-    <line x1="450" y1="860" x2="450" y2="895"/>
-    <line x1="770" y1="860" x2="770" y2="895"/>
-    <line x1="130" y1="895" x2="770" y2="895"/>
-    <line x1="450" y1="895" x2="450" y2="918" marker-end="url(#arrow)"/>
-    <line x1="450" y1="1004" x2="450" y2="1032" marker-end="url(#arrow)"/>
-    <line x1="450" y1="1098" x2="450" y2="1126" marker-end="url(#arrow)"/>
-    <line x1="450" y1="1212" x2="450" y2="1240" marker-end="url(#arrow)"/>
-    <!-- no-branches -->
+    <path d="M 450 748 C 450 768, 130 768, 130 786" marker-end="url(#arrow)"/>
+    <line x1="450" y1="748" x2="450" y2="786" marker-end="url(#arrow)"/>
+    <path d="M 450 748 C 450 768, 770 768, 770 786" marker-end="url(#arrow)"/>
+    <!-- merge: branches -> fan-out? -->
+    <line x1="130" y1="874" x2="130" y2="909"/>
+    <line x1="450" y1="874" x2="450" y2="909"/>
+    <line x1="770" y1="874" x2="770" y2="909"/>
+    <line x1="130" y1="909" x2="770" y2="909"/>
+    <line x1="450" y1="909" x2="450" y2="932" marker-end="url(#arrow)"/>
+    <!-- merge: fan-out group -> receipt -->
+    <line x1="450" y1="998" x2="450" y2="1018"/>
+    <line x1="450" y1="1018" x2="770" y2="1018"/>
+    <line x1="450" y1="1018" x2="450" y2="1046" marker-end="url(#arrow)"/>
+    <line x1="450" y1="1132" x2="450" y2="1160" marker-end="url(#arrow)"/>
+    <line x1="450" y1="1246" x2="450" y2="1274" marker-end="url(#arrow)"/>
+    <line x1="450" y1="1340" x2="450" y2="1368" marker-end="url(#arrow)"/>
+    <line x1="450" y1="1454" x2="450" y2="1482" marker-end="url(#arrow)"/>
+    <line x1="450" y1="1548" x2="450" y2="1576" marker-end="url(#arrow)"/>
+    <line x1="450" y1="1662" x2="450" y2="1690" marker-end="url(#arrow)"/>
+    <!-- no/yes branches -->
     <line x1="271" y1="264" x2="242" y2="264" marker-end="url(#arrow)"/>
-    <line x1="271" y1="586" x2="242" y2="586" marker-end="url(#arrow)"/>
-    <line x1="629" y1="1066" x2="658" y2="1066" marker-end="url(#arrow)"/>
+    <line x1="271" y1="602" x2="242" y2="602" marker-end="url(#arrow)"/>
+    <line x1="629" y1="966" x2="658" y2="966" marker-end="url(#arrow)"/>
+    <line x1="629" y1="1308" x2="658" y2="1308" marker-end="url(#arrow)"/>
+    <line x1="629" y1="1516" x2="658" y2="1516" marker-end="url(#arrow)"/>
   </g>
   <g font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#9ca3af" text-anchor="middle">
     <text x="256" y="258">no</text>
-    <text x="256" y="580">no</text>
-    <text x="644" y="1060">no</text>
+    <text x="256" y="596">no</text>
+    <text x="644" y="960">yes</text>
+    <text x="644" y="1302">no</text>
+    <text x="644" y="1510">no</text>
   </g>
 
   <!-- ===== port dots ===== -->
   <g fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2">
-    <circle cx="450" cy="118" r="3.5"/><circle cx="450" cy="202" r="3.5"/>
-    <circle cx="450" cy="232" r="3.5"/><circle cx="450" cy="296" r="3.5"/>
-    <circle cx="450" cy="326" r="3.5"/><circle cx="450" cy="410" r="3.5"/>
-    <circle cx="450" cy="440" r="3.5"/><circle cx="450" cy="524" r="3.5"/>
-    <circle cx="450" cy="554" r="3.5"/><circle cx="450" cy="618" r="3.5"/>
-    <circle cx="450" cy="648" r="3.5"/><circle cx="450" cy="732" r="3.5"/>
-    <circle cx="130" cy="772" r="3.5"/><circle cx="130" cy="860" r="3.5"/>
-    <circle cx="450" cy="772" r="3.5"/><circle cx="450" cy="860" r="3.5"/>
-    <circle cx="770" cy="772" r="3.5"/><circle cx="770" cy="860" r="3.5"/>
-    <circle cx="450" cy="920" r="3.5"/><circle cx="450" cy="1004" r="3.5"/>
-    <circle cx="450" cy="1034" r="3.5"/><circle cx="450" cy="1098" r="3.5"/>
-    <circle cx="450" cy="1128" r="3.5"/><circle cx="450" cy="1212" r="3.5"/>
+    <circle cx="450" cy="88" r="3.5"/><circle cx="450" cy="118" r="3.5"/>
+    <circle cx="450" cy="202" r="3.5"/><circle cx="450" cy="232" r="3.5"/>
+    <circle cx="450" cy="296" r="3.5"/><circle cx="450" cy="326" r="3.5"/>
+    <circle cx="450" cy="410" r="3.5"/><circle cx="450" cy="440" r="3.5"/>
+    <circle cx="450" cy="542" r="3.5"/><circle cx="450" cy="570" r="3.5"/>
+    <circle cx="450" cy="634" r="3.5"/><circle cx="450" cy="664" r="3.5"/>
+    <circle cx="450" cy="748" r="3.5"/>
+    <circle cx="130" cy="786" r="3.5"/><circle cx="130" cy="874" r="3.5"/>
+    <circle cx="450" cy="786" r="3.5"/><circle cx="450" cy="874" r="3.5"/>
+    <circle cx="770" cy="786" r="3.5"/><circle cx="770" cy="874" r="3.5"/>
+    <circle cx="450" cy="934" r="3.5"/>
+    <circle cx="450" cy="998" r="3.5"/><circle cx="770" cy="1018" r="3.5"/>
+    <circle cx="450" cy="1048" r="3.5"/>
+    <circle cx="450" cy="1132" r="3.5"/><circle cx="450" cy="1162" r="3.5"/>
+    <circle cx="450" cy="1246" r="3.5"/><circle cx="450" cy="1276" r="3.5"/>
+    <circle cx="450" cy="1340" r="3.5"/><circle cx="450" cy="1370" r="3.5"/>
+    <circle cx="450" cy="1454" r="3.5"/><circle cx="450" cy="1484" r="3.5"/>
+    <circle cx="450" cy="1548" r="3.5"/><circle cx="450" cy="1578" r="3.5"/>
+    <circle cx="450" cy="1662" r="3.5"/><circle cx="450" cy="1692" r="3.5"/>
   </g>
 
   <!-- ===== cards ===== -->
@@ -89,80 +108,119 @@
     <text x="450" y="400" font-size="13" fill="#9ca3af">never invent a teammate</text>
 
     <!-- 5 Claim -->
-    <rect x="271" y="440" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <rect x="271" y="440" width="358" height="102" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
     <circle cx="293" cy="482" r="7" fill="#3b82f6"/>
     <text x="450" y="474" font-size="17" font-weight="bold" fill="#1f2937">Claim work first</text>
     <text x="450" y="496" font-size="13" fill="#9ca3af">team/claims/&lt;task-id&gt;.json</text>
-    <text x="450" y="514" font-size="13" fill="#9ca3af">heartbeat every 30 min · 2 h TTL</text>
+    <text x="450" y="514" font-size="13" fill="#9ca3af">heartbeat 30 min · 2 h TTL · hard cap 24 h</text>
+    <text x="450" y="532" font-size="13" fill="#9ca3af">--worktree optional · open gate blocks claim</text>
 
     <!-- 6 Claim accepted? -->
-    <rect x="271" y="554" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <circle cx="293" cy="586" r="7" fill="#f59e0b"/>
-    <text x="450" y="592" font-size="17" font-weight="bold" fill="#1f2937">Claim accepted?</text>
-    <rect x="588" y="575" width="28" height="22" rx="4" fill="#fffbeb"/>
-    <text x="602" y="590" font-size="11" font-weight="bold" fill="#b45309">IF</text>
+    <rect x="271" y="570" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="602" r="7" fill="#f59e0b"/>
+    <text x="450" y="608" font-size="17" font-weight="bold" fill="#1f2937">Claim accepted?</text>
+    <rect x="588" y="591" width="28" height="22" rx="4" fill="#fffbeb"/>
+    <text x="602" y="606" font-size="11" font-weight="bold" fill="#b45309">IF</text>
 
     <!-- 7 Search features -->
-    <rect x="271" y="648" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <circle cx="293" cy="690" r="7" fill="#3b82f6"/>
-    <text x="450" y="682" font-size="17" font-weight="bold" fill="#1f2937">Search features</text>
-    <text x="450" y="704" font-size="13" fill="#9ca3af">team/features/&lt;id&gt;.json</text>
-    <text x="450" y="722" font-size="13" fill="#9ca3af">try 2–3 keywords before building</text>
+    <rect x="271" y="664" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="706" r="7" fill="#3b82f6"/>
+    <text x="450" y="698" font-size="17" font-weight="bold" fill="#1f2937">Search features</text>
+    <text x="450" y="720" font-size="13" fill="#9ca3af">team/features/&lt;id&gt;.json</text>
+    <text x="450" y="738" font-size="13" fill="#9ca3af">try 2–3 keywords before building</text>
 
     <!-- branches -->
-    <rect x="20" y="772" width="220" height="88" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <text x="130" y="806" font-size="16" font-weight="bold" fill="#1f2937">Reuse it</text>
-    <text x="130" y="828" font-size="13" fill="#9ca3af">stable match —</text>
-    <text x="130" y="846" font-size="13" fill="#9ca3af">call its entry</text>
+    <rect x="20" y="786" width="220" height="88" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <text x="130" y="820" font-size="16" font-weight="bold" fill="#1f2937">Reuse it</text>
+    <text x="130" y="842" font-size="13" fill="#9ca3af">stable match —</text>
+    <text x="130" y="860" font-size="13" fill="#9ca3af">call its entry</text>
 
-    <rect x="340" y="772" width="220" height="88" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <text x="450" y="806" font-size="16" font-weight="bold" fill="#1f2937">Improve in place</text>
-    <text x="450" y="828" font-size="13" fill="#9ca3af">needs growth — same id,</text>
-    <text x="450" y="846" font-size="13" fill="#9ca3af">bump the version</text>
+    <rect x="340" y="786" width="220" height="88" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <text x="450" y="820" font-size="16" font-weight="bold" fill="#1f2937">Improve in place</text>
+    <text x="450" y="842" font-size="13" fill="#9ca3af">needs growth — same id,</text>
+    <text x="450" y="860" font-size="13" fill="#9ca3af">bump the version</text>
 
-    <rect x="660" y="772" width="220" height="88" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <text x="770" y="806" font-size="16" font-weight="bold" fill="#1f2937">Build, then register</text>
-    <text x="770" y="828" font-size="13" fill="#9ca3af">no match — register</text>
-    <text x="770" y="846" font-size="13" fill="#9ca3af">before you push</text>
+    <rect x="660" y="786" width="220" height="88" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <text x="770" y="820" font-size="16" font-weight="bold" fill="#1f2937">Build, then register</text>
+    <text x="770" y="842" font-size="13" fill="#9ca3af">no match — register</text>
+    <text x="770" y="860" font-size="13" fill="#9ca3af">before you push</text>
 
-    <!-- 8 Sync before push -->
-    <rect x="271" y="920" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <circle cx="293" cy="962" r="7" fill="#3b82f6"/>
-    <text x="450" y="954" font-size="17" font-weight="bold" fill="#1f2937">Sync before push</text>
-    <text x="450" y="976" font-size="13" fill="#9ca3af">fetch · rebase · sync_check</text>
-    <text x="450" y="994" font-size="13" fill="#9ca3af">roster · claims · features · validate</text>
+    <!-- 8 Fan out? -->
+    <rect x="271" y="934" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="966" r="7" fill="#f59e0b"/>
+    <text x="450" y="972" font-size="17" font-weight="bold" fill="#1f2937">Fan out?</text>
+    <rect x="588" y="955" width="28" height="22" rx="4" fill="#fffbeb"/>
+    <text x="602" y="970" font-size="11" font-weight="bold" fill="#b45309">IF</text>
 
-    <!-- 9 All checks pass? -->
-    <rect x="271" y="1034" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <circle cx="293" cy="1066" r="7" fill="#f59e0b"/>
-    <text x="450" y="1072" font-size="17" font-weight="bold" fill="#1f2937">All checks pass?</text>
-    <rect x="588" y="1055" width="28" height="22" rx="4" fill="#fffbeb"/>
-    <text x="602" y="1070" font-size="11" font-weight="bold" fill="#b45309">IF</text>
+    <!-- 9 Done — file a receipt -->
+    <rect x="271" y="1048" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="1090" r="7" fill="#3b82f6"/>
+    <text x="450" y="1082" font-size="17" font-weight="bold" fill="#1f2937">Done — file a receipt</text>
+    <text x="450" y="1104" font-size="13" fill="#9ca3af">claim.py done --outcome … --summary …</text>
+    <text x="450" y="1122" font-size="13" fill="#9ca3af">no silent done · a claim, not proof</text>
 
-    <!-- 10 Push -->
-    <rect x="271" y="1128" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <circle cx="293" cy="1170" r="7" fill="#3b82f6"/>
-    <text x="450" y="1162" font-size="17" font-weight="bold" fill="#1f2937">Push --atomic, then PR</text>
-    <text x="450" y="1184" font-size="13" fill="#9ca3af">merge via pull request</text>
-    <text x="450" y="1202" font-size="13" fill="#9ca3af">CI twin is the real gate</text>
+    <!-- 10 Review the work -->
+    <rect x="271" y="1162" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="1204" r="7" fill="#3b82f6"/>
+    <text x="450" y="1196" font-size="17" font-weight="bold" fill="#1f2937">Review the work</text>
+    <text x="450" y="1218" font-size="13" fill="#9ca3af">approve / request-changes · reviewer ≠ owner</text>
+    <text x="450" y="1236" font-size="13" fill="#9ca3af">latest request-changes blocks PRD done</text>
 
-    <!-- 11 Done -->
-    <rect x="271" y="1242" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <circle cx="293" cy="1274" r="7" fill="#22c55e"/>
-    <text x="450" y="1270" font-size="17" font-weight="bold" fill="#1f2937">Done — merged via PR</text>
-    <text x="450" y="1292" font-size="13" fill="#9ca3af">never push straight to main</text>
+    <!-- 11 Gates satisfied? -->
+    <rect x="271" y="1276" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="1308" r="7" fill="#f59e0b"/>
+    <text x="450" y="1314" font-size="17" font-weight="bold" fill="#1f2937">Gates satisfied?</text>
+    <rect x="588" y="1297" width="28" height="22" rx="4" fill="#fffbeb"/>
+    <text x="602" y="1312" font-size="11" font-weight="bold" fill="#b45309">IF</text>
 
-    <!-- side cards: no-branches -->
+    <!-- 12 Sync before push -->
+    <rect x="271" y="1370" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="1412" r="7" fill="#3b82f6"/>
+    <text x="450" y="1404" font-size="17" font-weight="bold" fill="#1f2937">Sync before push</text>
+    <text x="450" y="1426" font-size="13" fill="#9ca3af">fetch · rebase · sync_check</text>
+    <text x="450" y="1444" font-size="13" fill="#9ca3af">roster · claims · features · validate</text>
+
+    <!-- 13 All checks pass? -->
+    <rect x="271" y="1484" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="1516" r="7" fill="#f59e0b"/>
+    <text x="450" y="1522" font-size="17" font-weight="bold" fill="#1f2937">All checks pass?</text>
+    <rect x="588" y="1505" width="28" height="22" rx="4" fill="#fffbeb"/>
+    <text x="602" y="1520" font-size="11" font-weight="bold" fill="#b45309">IF</text>
+
+    <!-- 14 Push -->
+    <rect x="271" y="1578" width="358" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="1620" r="7" fill="#3b82f6"/>
+    <text x="450" y="1612" font-size="17" font-weight="bold" fill="#1f2937">Push --atomic, then PR</text>
+    <text x="450" y="1634" font-size="13" fill="#9ca3af">merge via pull request</text>
+    <text x="450" y="1652" font-size="13" fill="#9ca3af">CI twin is the real gate</text>
+
+    <!-- 15 Done -->
+    <rect x="271" y="1692" width="358" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <circle cx="293" cy="1724" r="7" fill="#22c55e"/>
+    <text x="450" y="1720" font-size="17" font-weight="bold" fill="#1f2937">Done — merged via PR</text>
+    <text x="450" y="1742" font-size="13" fill="#9ca3af">never push straight to main</text>
+
+    <!-- side cards: no/yes branches -->
     <rect x="20" y="232" width="220" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
     <text x="130" y="260" font-size="15" font-weight="bold" fill="#1f2937">STOP</text>
     <text x="130" y="282" font-size="13" fill="#9ca3af">make a roster first</text>
 
-    <rect x="20" y="554" width="220" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <text x="130" y="582" font-size="15" font-weight="bold" fill="#1f2937">STOP</text>
-    <text x="130" y="604" font-size="13" fill="#9ca3af">pick other work</text>
+    <rect x="20" y="570" width="220" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <text x="130" y="598" font-size="15" font-weight="bold" fill="#1f2937">STOP</text>
+    <text x="130" y="620" font-size="13" fill="#9ca3af">pick other work</text>
 
-    <rect x="660" y="1034" width="220" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
-    <text x="770" y="1062" font-size="15" font-weight="bold" fill="#1f2937">Fix it</text>
-    <text x="770" y="1084" font-size="13" fill="#9ca3af">do not push</text>
+    <rect x="660" y="934" width="220" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <text x="770" y="968" font-size="16" font-weight="bold" fill="#1f2937">Fan-out group</text>
+    <text x="770" y="990" font-size="13" fill="#9ca3af">one prompt, N member claims</text>
+    <text x="770" y="1008" font-size="13" fill="#9ca3af">compare · decide one winner</text>
+
+    <rect x="660" y="1276" width="220" height="84" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <text x="770" y="1310" font-size="15" font-weight="bold" fill="#1f2937">WAIT</text>
+    <text x="770" y="1332" font-size="13" fill="#9ca3af">resolve the gate first</text>
+    <text x="770" y="1350" font-size="13" fill="#9ca3af">or a human waives it</text>
+
+    <rect x="660" y="1484" width="220" height="64" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2"/>
+    <text x="770" y="1512" font-size="15" font-weight="bold" fill="#1f2937">Fix it</text>
+    <text x="770" y="1534" font-size="13" fill="#9ca3af">do not push</text>
   </g>
 </svg>
