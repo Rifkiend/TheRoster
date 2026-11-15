@@ -59,6 +59,11 @@ Rules:
   dependent is re-verified (features.py reverify refreshes the
   recorded versions). Old records without contract/depends_on are
   read as contract=false with no dependencies.
+- Dependency cycles (v2.5): a cycle (A depends on B depends on A,
+  or any longer loop) FAILS every check — register/improve refuse
+  the edge that would close the loop, check/validate/reverify fail
+  on a loop already in the files. A cycle can never be
+  topologically sorted, so any tool that tries loops forever.
 - SemVer, enforced mechanically: valid MAJOR.MINOR.PATCH, no leading
   zeros, reset-to-zero on bump, monotonic increase. 0.y.z is always
   experimental (forced on register/improve). A pre-release version
@@ -489,6 +494,13 @@ def cmd_check(features_dir, roster_path, repo_root):
                 errors.append(f"canonical rule: stable features {', '.join(sorted(ids))} share keyword {kw!r} "
                               f"but {len(canon)} of them are canonical (exactly one must be) — "
                               "mark one canonical, or deprecate the others")
+    # Dependency cycles (v2.5): a cycle can never be topologically
+    # sorted, so any future tool that tries loops forever. The loop
+    # is named so the fixer knows which edge to cut.
+    cycle = tc.find_dependency_cycle(feats)
+    if cycle:
+        errors.append("dependency cycle: %s — break the loop (remove one depends_on edge); "
+                      "a cycle can never be topologically sorted" % " -> ".join(cycle))
     for w in warnings:
         print(f"  ! {w}")
     if errors:
@@ -564,6 +576,17 @@ def cmd_register(args):
     deps, derr = parse_depends_on(args.depends_on, features_dir, args.id)
     if derr:
         print("FEATURES: FAIL — " + derr)
+        return 1
+    # Cycle prevention (v2.5): refuse an edge that would close a
+    # loop — the prospective graph (existing features + this one)
+    # is checked before anything is written.
+    _prospective = dict(load_features(features_dir))
+    _prospective[args.id] = {"depends_on": deps}
+    _cycle = tc.find_dependency_cycle(_prospective)
+    if _cycle:
+        print("FEATURES: FAIL — registering %s with these dependencies would create a cycle: %s — "
+              "a cycle can never be topologically sorted; drop one depends_on edge"
+              % (args.id, " -> ".join(_cycle)))
         return 1
     path = feature_path(features_dir, args.id)
     if os.path.exists(path):
@@ -716,6 +739,19 @@ def cmd_improve(args):
     if derr:
         print("FEATURES: FAIL — " + derr)
         return 1
+    # Cycle prevention (v2.5): the merged graph (existing deps +
+    # the new ones) is checked before writing — an edge that would
+    # close a loop is refused, with the loop named.
+    if deps:
+        _prospective = load_features(args.features_dir)
+        _merged = merge_depends_on(data.get("depends_on"), deps)
+        _prospective[args.id] = dict(data, depends_on=_merged)
+        _cycle = tc.find_dependency_cycle(_prospective)
+        if _cycle:
+            print("FEATURES: FAIL — improving %s with these dependencies would create a cycle: %s — "
+                  "a cycle can never be topologically sorted; drop one depends_on edge"
+                  % (args.id, " -> ".join(_cycle)))
+            return 1
     forced = None
     if str(new_version).startswith("0.") and data.get("status") == "stable":
         forced = "version %s is 0.y.z, always experimental" % new_version
@@ -882,6 +918,13 @@ def cmd_reverify(args):
     err = check_entry(entry, kind, args.repo_root)
     if err:
         print(f"FEATURES: FAIL — entry invalid, cannot re-verify: {err}")
+        return 1
+    # Cycle gate (v2.5): refreshing dependency versions inside a
+    # loop is meaningless — the loop must be broken first.
+    _cycle = tc.find_dependency_cycle(load_features(args.features_dir))
+    if _cycle and args.id in _cycle:
+        print(f"FEATURES: FAIL — {args.id} is part of a dependency cycle: {' -> '.join(_cycle)} — "
+              "break the loop (remove one depends_on edge) before re-verifying")
         return 1
     blob_sha = ""
     if kind == "code":

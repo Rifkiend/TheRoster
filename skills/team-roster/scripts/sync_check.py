@@ -44,6 +44,12 @@ Hardened in v2.3.1: a worktree that is gone but whose branch still
 exists here FAILS (deleted on this machine — release the claim or
 recreate it), and a worktree with uncommitted changes FAILS (the
 merge check only sees commits).
+Last-known-main-SHA (v2.5): after a successful fetch, the recorded
+main SHA in team/config.json must still be an ancestor of the new
+origin/main — otherwise the remote history was rewritten
+(force-push) and sync_check FAILS without recording the new tip.
+When the ancestry passes, the new tip is recorded (a working-tree
+change to team/config.json, landing in the next commit).
 Stdlib only, Python 3.9+.
 """
 import argparse
@@ -116,6 +122,24 @@ def main():
         print(f"SYNC CHECK: OK — no remote to compare (no {remote}/{branch} yet). "
               "This push is the first sync: push, and the next AI will see it.")
         return 0
+
+    # Last-known-main-SHA (v2.5): the recorded main SHA must still be
+    # an ancestor of the freshly fetched origin/main — otherwise the
+    # remote history was rewritten (force-push) since this team last
+    # looked. FAIL, and do NOT record the new tip (that would erase
+    # the evidence). No recorded SHA yet warns only (first sight).
+    hstatus, hmsg = tc.check_main_history(
+        root, remote, branch, cfg.get("last_known_main_sha") or "")
+    if hstatus == "fail":
+        print("SYNC CHECK: FAIL — " + hmsg)
+        print("STOP: verify the new history by hand before trusting it. "
+              "Branch protection's 'block force pushes' is the repo-level answer; "
+              "this check is the detector, not the prevention.")
+        return 1
+    if hstatus in ("unrecorded", "unknown"):
+        print("SYNC CHECK: note — " + hmsg)
+    else:
+        print("SYNC CHECK: note — " + hmsg)
 
     # Remote record inventory: which per-record files exist remotely.
     r = run(["ls-tree", "-r", "--name-only", "%s/%s" % (remote, branch),
@@ -307,6 +331,16 @@ def main():
               % (remote, branch))
         print("on top of the new version — or stop if it conflicts. Never --force push.")
         return 1
+    # Record the verified tip (v2.5): the origin/main SHA this fetch
+    # confirmed becomes the last-known-main-SHA, so the next run can
+    # detect a rewrite. A working-tree change to team/config.json
+    # that lands in the next commit — that lag is by design (the
+    # recorded SHA is always an ancestor of the real tip, which is
+    # all the check needs).
+    recorded = tc.record_main_sha(team_dir, root, remote, branch)
+    if recorded:
+        print("SYNC CHECK: note — recorded last-known-main-SHA %s in team/config.json "
+              "(commit it with your next change)" % recorded[:8])
     print("SYNC CHECK: OK — local matches the remote. Safe to push.")
     return 0
 

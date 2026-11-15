@@ -28,6 +28,8 @@ Rules (v2):
   push team/ changes when signatures are required.
 - id grammar ^[a-z0-9][a-z0-9-]*$, max 64 chars, ASCII only
   (NFKC + casefold before comparison; non-ASCII rejected).
+- display names must be UNIQUE (v2.5, same normalisation as ids):
+  two members named "Rian" FAIL, whatever their ids say.
 - type in {human, ai-agent, tool}, status in {active, away, retired}.
 - can_do has 1-5 items.
 - last_verified is a real past YYYY-MM-DD date; for active members it
@@ -54,6 +56,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -81,7 +84,16 @@ IMPERATIVE_RES = [
 ]
 
 
-def validate_member(m, label, errors, warnings, today, seen_ids):
+def normalize_display_name(value):
+    """Canonical form for display-name comparison (v2.5): NFKC +
+    casefold, inner whitespace collapsed, ends stripped. "Rian",
+    "rian", and " Rian " are the same name — and two members with
+    the same name are the same person to every human reading the
+    roster, whatever their ids say."""
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(value)).casefold()).strip()
+
+
+def validate_member(m, label, errors, warnings, today, seen_ids, seen_names):
     if not isinstance(m, dict):
         errors.append(f"{label}: member must be a JSON object")
         return
@@ -96,6 +108,21 @@ def validate_member(m, label, errors, warnings, today, seen_ids):
         if mid in seen_ids:
             errors.append(f"{label}: duplicate id")
         seen_ids.add(mid)
+    # v2.5: display names must be unique too. Ids were already
+    # unique, but names are what humans read — and the skill's first
+    # instruction is to read the roster. A second "Rian" (id
+    # `mallory`, name "Rian") used to pass every check. It does not
+    # stop a determined impersonator (they can pick a different
+    # name) — it stops the accidental/confusing case, which is the
+    # realistic one.
+    name = m.get("name", "")
+    if isinstance(name, str) and name.strip():
+        norm = normalize_display_name(name)
+        if norm in seen_names:
+            errors.append(f"{label}: duplicate display name {name!r} (already used by {seen_names[norm]}) — "
+                          "display names must be unique; ids are unique, but names are what humans read")
+        else:
+            seen_names[norm] = label
     if m.get("type") and m["type"] not in TYPES:
         errors.append(f"{label}: type must be human, ai-agent, or tool (got {m['type']})")
     if m.get("status") and m["status"] not in STATUSES:
@@ -203,8 +230,9 @@ def main():
 
     today = date.today()
     seen_ids = set()
+    seen_names = {}
     for label, m in members:
-        validate_member(m, label, errors, warnings, today, seen_ids)
+        validate_member(m, label, errors, warnings, today, seen_ids, seen_names)
 
     for w in warnings:
         print(f"  ! {w}")
