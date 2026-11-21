@@ -17,7 +17,7 @@
   ],
   "depends_on": [],
   "does": "Login dengan email + password, mengembalikan token sesi",
-  "entry": "src/auth/login.py:login",
+  "entry": "src/auth/login.py:login#14",
   "entry_blob_sha": "bd9d9d40bd67c3dcf98b617227a5b07b13b720bf",
   "files": [
     "src/auth/login.py",

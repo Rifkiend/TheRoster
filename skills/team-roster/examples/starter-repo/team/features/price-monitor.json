@@ -15,7 +15,7 @@
     "assistant"
   ],
   "does": "Cek harga + diskon produk toko 3x sehari, lapor hanya kalau berubah",
-  "entry": "scripts/monitor_harga.py:cek_harga",
+  "entry": "scripts/monitor_harga.py:cek_harga#12",
   "entry_blob_sha": "ecab81dec352a8ab1dec07023b783b6bc5462c7f",
   "files": [
     "scripts/monitor_harga.py"
