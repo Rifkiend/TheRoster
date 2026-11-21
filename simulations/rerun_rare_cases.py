@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Re-run the 15 rare / mind-blowing cases from
 research_notes/rare-cases-theroster-20261115/report.md against the
-CURRENT scripts (v2.7.0) on fresh starter-repo fixtures in /tmp.
+CURRENT scripts (v2.8.0) on fresh starter-repo fixtures in /tmp.
 
 Each case reproduces the original's exact setup and asserts the
-v2.7.0 outcome — CLOSED where v2.7.0 fixes it, STILL HOLE where the
+v2.8.0 outcome — CLOSED where v2.8.0 fixes it, STILL HOLE where the
 fix is queued (ranked-below), UNCHANGED where the original verdict
 was already "not a hole" or "boundary". A failed assertion means the
 rerun itself is wrong OR the expected outcome did not hold — either
@@ -149,7 +149,7 @@ def case(cid, title, v23, fn):
         print("   -", n)
     print(f"   => {cid}: {verdict}")
     results.append({"id": cid, "title": title, "v2.3.0": v23,
-                    "v2.7.0": verdict, "notes": notes})
+                    "v2.8.0": verdict, "notes": notes})
     return verdict
 
 
@@ -957,23 +957,23 @@ def main():
     case("12b", "Lamport inversion", "HOLE", c12b)
     case("12c", "index.json forgery", "NOT A HOLE", c12c)
     case("12d", "Pusher vs alphabet", "HOLE", c12d)
-    closed = sum(1 for r in results if r["v2.7.0"].startswith("CLOSED"))
-    partial = sum(1 for r in results if r["v2.7.0"].startswith("PARTIAL"))
-    still = sum(1 for r in results if "STILL HOLE" in r["v2.7.0"])
-    unchanged = sum(1 for r in results if r["v2.7.0"].startswith("UNCHANGED"))
-    boundary = sum(1 for r in results if r["v2.7.0"].startswith("BOUNDARY"))
-    errors = sum(1 for r in results if r["v2.7.0"].startswith("ERROR"))
+    closed = sum(1 for r in results if r["v2.8.0"].startswith("CLOSED"))
+    partial = sum(1 for r in results if r["v2.8.0"].startswith("PARTIAL"))
+    still = sum(1 for r in results if "STILL HOLE" in r["v2.8.0"])
+    unchanged = sum(1 for r in results if r["v2.8.0"].startswith("UNCHANGED"))
+    boundary = sum(1 for r in results if r["v2.8.0"].startswith("BOUNDARY"))
+    errors = sum(1 for r in results if r["v2.8.0"].startswith("ERROR"))
     doc = {
-        "generated_by": "rerun_rare_cases.py — TheRoster v2.7.0 (re-run of research_notes/rare-cases-theroster-20261115/report.md)",
+        "generated_by": "rerun_rare_cases.py — TheRoster v2.8.0 (re-run of research_notes/rare-cases-theroster-20261115/report.md)",
         "results": results,
         "summary": {"cases": len(results), "closed": closed, "partial": partial,
                     "still_hole": still, "unchanged": unchanged,
                     "boundary": boundary, "errors": errors},
     }
     (OUT / "rare-cases-rerun.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False))
-    print("\n================ RARE-CASES RERUN (v2.7.0) ================")
+    print("\n================ RARE-CASES RERUN (v2.8.0) ================")
     for r in results:
-        print(f"  {r['id']:>4}  {r['v2.7.0']}")
+        print(f"  {r['id']:>4}  {r['v2.8.0']}")
     print(f"\nDONE: {len(results)} cases — closed {closed}, partial {partial}, "
           f"still hole {still}, unchanged {unchanged}, boundary {boundary}, errors {errors}")
     print("->", OUT / "rare-cases-rerun.json")
