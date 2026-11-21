@@ -14,7 +14,7 @@ Usage:
                                [--repo-root .]
     python3 features.py register --id login-api --name "Login API" \
         --does "Login with email + password, returns a session token" \
-        --entry src/auth/login.py:login \
+        --entry src/auth/login.py:login#14 \
         --files src/auth/login.py tests/test_login.py \
         --owner rian --keywords login auth sesi \
         [--kind code] [--status experimental] [--version 1.0.0] \
@@ -69,15 +69,21 @@ Rules:
   experimental (forced on register/improve). A pre-release version
   (e.g. 1.6.0-branch.1) can never be stable. --breaking true/false +
   --breaking-notes are mandatory on register and improve.
-- Entry validation (check): for kind=code, entry is file:function —
-  the file must exist in the tree, the named symbol must exist
-  (ast parse for def/class, regex fallback — a HEURISTIC, not a
-  proof the function does what the description says), and
+- Entry validation (check): for kind=code, entry is file:function[#line]
+  (v2.7: the optional #line cites the definition line — new or changed
+  code entries MUST carry it; old entries without it are grandfathered
+  and only warned) — the file must exist in the tree, the named symbol
+  must exist (ast parse for def/class, regex fallback — a HEURISTIC, not
+  a proof the function does what the description says; when a #line is
+  cited the symbol must be defined AT that exact line), and
   entry_blob_sha must match the file's current git blob sha
   (sha1 of "blob <len>\\0" + bytes). Mismatch = FAIL "suspect — run
   features.py reverify --id <id> to re-verify after reading the new
-  code". For non-code kinds, entry is a pointer (doc URL or repo
-  path); a path pointer must exist, a URL is accepted as-is.
+  code". Reverify also (re)pins the #line: it adds the line when
+  missing and updates it when the symbol moved (a moved line is not a
+  contract change — the contract is file:function). For non-code kinds,
+  entry is a pointer (doc URL or repo path); a path pointer must exist,
+  a URL is accepted as-is.
 - Canonical rule: two stable features sharing >=1 keyword FAIL unless
   exactly one of them is canonical.
 - Search is deterministic, top-5: score (id match 3, name/keyword
@@ -187,27 +193,74 @@ def mutate(features_dir, fid, actor, event, updater, extra=None):
     return data, None
 
 
+def split_entry_line(entry):
+    """Split a code entry into (base_entry, line). Entry format (v2.7):
+    file:function[#line] — the optional #line cites the definition line.
+    Returns (entry, None) when there is no numeric #line suffix. The
+    split is on the LAST '#' whose tail is all digits, so a '#' inside
+    a file path cannot be mistaken for a citation."""
+    if "#" not in entry:
+        return entry, None
+    base, _, tail = entry.rpartition("#")
+    if tail.isdigit():
+        return base, int(tail)
+    return entry, None
+
+
+def find_symbol_line(path, symbol):
+    """1-based line where `symbol` is defined (def/async def/class) in
+    the file, or None when not found. ast first, regex fallback for
+    files ast cannot parse. Shared by check_symbol (line verification)
+    and reverify (line (re)pinning)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            source = f.read()
+    except OSError:
+        return None
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        tree = None
+    if tree is not None:
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) \
+                    and node.name == symbol:
+                return node.lineno
+        return None
+    for i, text in enumerate(source.splitlines(), 1):
+        if re.match(r"\s*(async\s+def|def|class)\s+" + re.escape(symbol) + r"\b", text):
+            return i
+    return None
+
+
 def check_entry(entry, kind, repo_root):
     """Validate an entry pointer. Returns an error string, or None.
 
-    kind=code: entry must be file:function; file must exist; symbol
-    must exist (ast, regex fallback — heuristic); blob sha is checked
+    kind=code: entry must be file:function[#line]; file must exist;
+    symbol must exist (ast, regex fallback — heuristic); when a #line
+    is cited, the symbol must be DEFINED at that exact line (v2.7 —
+    the registry must prove the symbol is where the entry says it
+    is, not merely somewhere in the file). Blob sha is checked
     separately by the caller when a record carries entry_blob_sha.
-    Other kinds: entry is a pointer — an http(s) URL is accepted
-    as-is; anything else is treated as a repo path and must exist.
+    A missing #line does NOT fail here — old entries are grandfathered
+    (check warns instead); register/improve REQUIRE the line for new
+    or changed code entries. Other kinds: entry is a pointer — an
+    http(s) URL is accepted as-is; anything else is treated as a repo
+    path and must exist.
     """
     if not entry:
         return "entry is empty"
     if kind == "code":
-        if ":" not in entry:
-            return "code entry must be file:function (got %r)" % entry
-        fpath, symbol = entry.rsplit(":", 1)
+        base, line = split_entry_line(entry)
+        if ":" not in base:
+            return "code entry must be file:function[#line] (got %r)" % entry
+        fpath, symbol = base.rsplit(":", 1)
         if not fpath or not symbol:
-            return "code entry must be file:function (got %r)" % entry
+            return "code entry must be file:function[#line] (got %r)" % entry
         full = os.path.join(repo_root, fpath)
         if not os.path.isfile(full):
             return "entry file does not exist: %s" % fpath
-        sym_err = check_symbol(full, symbol)
+        sym_err = check_symbol(full, symbol, line=line)
         if sym_err:
             return sym_err
         return None
@@ -219,9 +272,22 @@ def check_entry(entry, kind, repo_root):
     return None
 
 
-def check_symbol(path, symbol):
+def check_symbol(path, symbol, line=None):
     """Heuristic: symbol defined as a def/class in the file. ast first,
-    regex fallback for files ast cannot parse. Returns error or None."""
+    regex fallback for files ast cannot parse. Returns error or None.
+    When `line` is given (v2.7), the symbol must be defined AT that
+    exact line — a symbol that exists elsewhere in the file does not
+    satisfy a line citation."""
+    if line is not None:
+        found = find_symbol_line(path, symbol)
+        if found is None:
+            return ("symbol %r is not defined (def/class) in %s — no match "
+                    "(heuristic check; confirm by reading the file)" % (symbol, path))
+        if found != line:
+            return ("symbol %r is defined at line %d in %s, not at the cited line %d — "
+                    "the entry points at the wrong line; run features.py reverify to re-pin it"
+                    % (symbol, found, path, line))
+        return None
     try:
         with open(path, encoding="utf-8") as f:
             source = f.read()
@@ -238,7 +304,7 @@ def check_symbol(path, symbol):
                 return None
         return ("symbol %r is not defined (def/class) in %s — ast parse found no match "
                 "(heuristic check; confirm by reading the file)" % (symbol, path))
-    if re.search(r"^\s*(def|class)\s+" + re.escape(symbol) + r"\b", source, re.M):
+    if re.search(r"^\s*(async\s+def|def|class)\s+" + re.escape(symbol) + r"\b", source, re.M):
         return None
     return ("symbol %r not found in %s by regex fallback "
             "(heuristic check; confirm by reading the file)" % (symbol, path))
@@ -431,10 +497,13 @@ def cmd_check(features_dir, roster_path, repo_root):
                 if not tc.valid_id(who):
                     errors.append(f"{label}: {who} (used_by) is not a valid task id")
         entry = f.get("entry", "")
-        if entry in seen_entries:
-            errors.append(f"{label}: duplicate entry {entry} — already used by {seen_entries[entry]}. Reuse that feature instead of registering a second one.")
+        # Duplicate entries compare on the BASE entry (v2.7): x.py:f
+        # and x.py:f#10 are the same symbol, not two features.
+        _base_entry, _ = split_entry_line(entry)
+        if _base_entry in seen_entries:
+            errors.append(f"{label}: duplicate entry {entry} — already used by {seen_entries[_base_entry]}. Reuse that feature instead of registering a second one.")
         else:
-            seen_entries[entry] = fid
+            seen_entries[_base_entry] = fid
         # Entry validation: file + symbol + blob sha (code kind).
         # Cancelled features are dead history — their code may be
         # gone — so they are exempt from live entry verification.
@@ -446,7 +515,15 @@ def cmd_check(features_dir, roster_path, repo_root):
             if err:
                 errors.append(f"{label}: entry invalid: {err}")
             elif kind == "code":
-                fpath = entry.rsplit(":", 1)[0]
+                # Line citation (v2.7): an old entry without #line is
+                # grandfathered — warn, don't fail. New/changed entries
+                # must carry the line (enforced at register/improve).
+                _base, _line = split_entry_line(entry)
+                if _line is None:
+                    warnings.append(f"{label}: entry {entry} has no line citation — the symbol is "
+                                    "verified anywhere in the file, not at a quoted line; run "
+                                    f"features.py reverify --id {fid} --by <you> to pin it (file:function#line)")
+                fpath = _base.rsplit(":", 1)[0]
                 full = os.path.join(repo_root, fpath)
                 want = f.get("entry_blob_sha")
                 if not want:
@@ -464,7 +541,7 @@ def cmd_check(features_dir, roster_path, repo_root):
             # Skipped when the entry is already invalid (that error
             # is reported above; the marker check needs a read file).
             if f.get("contract") is True and kind == "code" and not err:
-                fpath = entry.rsplit(":", 1)[0]
+                fpath = split_entry_line(entry)[0].rsplit(":", 1)[0]
                 full = os.path.join(repo_root, fpath)
                 try:
                     with open(full, encoding="utf-8", errors="ignore") as fh:
@@ -595,8 +672,17 @@ def cmd_register(args):
         return 1
     feats = load_features(features_dir)
     for fid, f in feats.items():
-        if f.get("entry") == args.entry:
+        if split_entry_line(f.get("entry") or "")[0] == split_entry_line(args.entry)[0]:
             print(f"FEATURES: FAIL — entry {args.entry} is already registered as {fid}. Reuse that feature.")
+            return 1
+    # Line citation (v2.7): a new code entry must cite its definition
+    # line — without it the registry cannot prove the symbol is where
+    # the entry says it is.
+    if args.kind == "code":
+        _base, _line = split_entry_line(args.entry)
+        if _line is None:
+            print("FEATURES: FAIL — code entry must cite its definition line: file:function#line "
+                  "(e.g. src/auth/login.py:login#14) — the line is where the symbol is defined")
             return 1
     err = check_entry(args.entry, args.kind, args.repo_root)
     if err:
@@ -727,8 +813,14 @@ def cmd_improve(args):
         return 1
     if args.entry:
         for fid, other in load_features(args.features_dir).items():
-            if fid != args.id and other.get("entry") == args.entry:
+            if fid != args.id and split_entry_line(other.get("entry") or "")[0] == split_entry_line(args.entry)[0]:
                 print(f"FEATURES: FAIL — entry {args.entry} is already used by {fid}.")
+                return 1
+        if (data.get("kind") or "code") == "code":
+            _base, _line = split_entry_line(args.entry)
+            if _line is None:
+                print("FEATURES: FAIL — a changed code entry must cite its definition line: file:function#line "
+                      "(e.g. src/auth/login.py:login#14)")
                 return 1
         err = check_entry(args.entry, data.get("kind") or "code", args.repo_root)
         if err:
@@ -915,10 +1007,34 @@ def cmd_reverify(args):
         return 1
     kind = data.get("kind") or "code"
     entry = data.get("entry", "")
-    err = check_entry(entry, kind, args.repo_root)
-    if err:
-        print(f"FEATURES: FAIL — entry invalid, cannot re-verify: {err}")
-        return 1
+    # v2.7: reverify (re)pins the line citation — add it when missing,
+    # update it when the symbol moved. The BASE entry (without #line)
+    # is what gets validity-checked here: a symbol that moved is a
+    # repair case, not a refusal — the strict "symbol must be at the
+    # cited line" failure belongs to features.py check (the push
+    # gate), not to the command whose job is fixing the record. A
+    # moved line is NOT a contract change (the contract is
+    # file:function, the line is just a pointer); a missing symbol
+    # still fails, below.
+    new_entry = entry
+    if kind == "code":
+        base, _line = split_entry_line(entry)
+        err = check_entry(base, kind, args.repo_root)
+        if err:
+            print(f"FEATURES: FAIL — entry invalid, cannot re-verify: {err}")
+            return 1
+        _fpath, _sym = base.rsplit(":", 1)
+        _found = find_symbol_line(os.path.join(args.repo_root, _fpath), _sym)
+        if _found is None:
+            print(f"FEATURES: FAIL — entry invalid, cannot re-verify: symbol {_sym!r} "
+                  f"is not defined in {_fpath}")
+            return 1
+        new_entry = "%s#%d" % (base, _found)
+    else:
+        err = check_entry(entry, kind, args.repo_root)
+        if err:
+            print(f"FEATURES: FAIL — entry invalid, cannot re-verify: {err}")
+            return 1
     # Cycle gate (v2.5): refreshing dependency versions inside a
     # loop is meaningless — the loop must be broken first.
     _cycle = tc.find_dependency_cycle(load_features(args.features_dir))
@@ -942,6 +1058,7 @@ def cmd_reverify(args):
             refreshed.append((dep["id"], dep.get("version"), cur["version"]))
 
     def upd(f):
+        f["entry"] = new_entry
         f["entry_blob_sha"] = blob_sha or ""
         f["last_verified"] = date.today().isoformat()
         for dep in f.get("depends_on") or []:
@@ -952,7 +1069,9 @@ def cmd_reverify(args):
     if err:
         print("FEATURES: FAIL — " + err)
         return 1
-    print(f"FEATURES: {args.id} re-verified by {args.by} — entry {entry}, blob {blob_sha or '(n/a)'}")
+    print(f"FEATURES: {args.id} re-verified by {args.by} — entry {new_entry}, blob {blob_sha or '(n/a)'}")
+    if new_entry != entry:
+        print(f"FEATURES: entry line (re)pinned: {entry} -> {new_entry}")
     for did, old, new in refreshed:
         print(f"FEATURES: dependency refreshed: {did} {old} -> {new}")
     return 0

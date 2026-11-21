@@ -247,7 +247,7 @@ def main():
         _spath = os.path.join(scripts_dir, _script)
         if not os.path.isfile(_spath):
             warnings.append(f"{_script} not found in {scripts_dir} — {_subdir} records cannot be "
-                            "checked; update the skill copy to v2.6.0")
+                            "checked; update the skill copy to v2.7.0")
             continue
         _r = subprocess.run(
             [sys.executable, _spath, "check",
