@@ -627,6 +627,22 @@ def main():
     _verr, _vwarn = _rv.check_reviews(os.path.join(team_dir, "reviews"), _roster_dir)
     errors.extend("review " + e for e in _verr)
     warnings.extend("review " + w for w in _vwarn)
+
+    # ---- Graphyfy (v2.8): the code graph (team/graph.json) is a MAP,
+    # not a record — validate.py only checks its freshness and the
+    # measured threshold; it never builds the graph. A stale graph
+    # FAILs (a lying map is worse than no map); a missing graph only
+    # warns when the repo is above the threshold (teams that have not
+    # built one yet are not bricked), and is silently fine below the
+    # threshold (reading directly is cheaper there). The graph itself
+    # is built manually / at merge time: scripts/graph.py build.
+    # check_graph is the single source of these rules (doctor.py
+    # calls the same function); the "fresh" test is diff-based, not
+    # commit_sha == HEAD — see graph.py graph_freshness().
+    import graph as _gr
+    _gerr, _gwarn, _gstat = _gr.check_graph(team_dir, root)
+    errors.extend("graph: " + e for e in _gerr)
+    warnings.extend("graph: " + w for w in _gwarn)
     for tid, c in sorted(claims.items()):
         if not tc.is_blocking(c, cfg=cfg, roster_ids=all_ids):
             continue
@@ -1196,7 +1212,7 @@ def main():
     print(f"VALIDATE: OK — {len(roster)} roster member(s), {len(claims)} claim(s), "
           f"{len(features)} feature(s), {len(prd)} PRD item(s), {len(fanout)} fan-out group(s), "
           f"{len(gates)} gate(s), {len(receipts)} receipt(s), {len(reviews)} review(s) cross-checked; "
-          f"{scanned} team/ file(s) scanned for secrets/PII.")
+          f"{scanned} team/ file(s) scanned for secrets/PII; graph: {_gstat}.")
     return 0
 
 

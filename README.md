@@ -1,35 +1,79 @@
 <div align="center">
 
-![TheRoster — one team, every AI, zero guesswork](docs/banner.svg)
+<img src="assets/theroster-icon.webp" width="160" alt="TheRoster icon — a 2D tesseract prism, the mirror world of the team">
 
 # TheRoster
 
 ### One team. Every AI. Zero guesswork.
 
-[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.7.0-blue)](https://agentskills.io)
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.8.0-blue)](https://agentskills.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-yellow.svg)](#install)
-[![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#description)
+[![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#faq)
 
-> **Give every AI the same team — so no one invents teammates,**
-> **collides on the same file, or rebuilds the same feature twice.**
+**TheRoster is an Agent Skill that gives every AI the same team — so no one invents teammates, collides on the same file, or rebuilds the same feature twice.** No server, no protocol, no new account — just a written roster, claims, and a feature registry, synced through git and checked by a hook + CI.
 
-| Know the team | Claim the work | Reuse, don't rebuild | Continue in place |
-|---|---|---|---|
-| A written roster is the single source of truth. Not on the list, not your teammate. | One task, one owner at a time. Claim it, push the claim alone, then work. | Search the registry first. A stable feature already exists? Use it. | The second AI picks up the first AI's feature — same id, higher version. No fork, no double work. |
+```bash
+npx skills add Rifkiend/TheRoster
+```
 
 </div>
 
 ---
 
-AI models are stateless — without a written list, an AI does not know who your teammates are, so it guesses. A guessed teammate is a hallucination. This skill fixes that with one rule: **the roster is the single source of truth about the team.**
+## FAQ
+
+<details>
+<summary><strong>Apa itu TheRoster?</strong></summary>
+
+One rule: **the roster is the single source of truth about the team.** If someone is not on the list, they are not your teammate — do not invent them.
+
+- **Roster** — who the team is (`team/roster/`).
+- **Claims** — who is doing what right now (`team/claims/`): one task, one owner at a time; claim before you touch anything.
+- **Feature registry** — what already exists (`team/features/`): search before you build; use a stable feature instead of rebuilding it; continue it in place, don't fork it.
+- **Receipts, reviews, PRD** — finishing means filing a typed receipt, a teammate reviews the work, and every task traces back to a PRD item.
 
 It works for any job, not just code: a website-build team, a software team, an open-source project, a content team, a small online store, a campus group project, a freelance client team. People, AI agents, and tools can all be on the roster.
+
+</details>
+
+<details>
+<summary><strong>Gimana cara install?</strong></summary>
+
+```bash
+npx skills add Rifkiend/TheRoster
+```
+
+Or copy it into your project (`.claude/skills/`, `.agents/skills/`, `.github/skills/`, or `.cursor/skills/`), then start your team state from the starter repo, install the pre-push hook, and run `doctor.py`. Full steps: [Install](#install) below.
+
+</details>
+
+<details>
+<summary><strong>Apa itu Graphyfy?</strong></summary>
+
+New in v2.8.0: `team/graph.json` maps every file — location, size (lines/tokens), imports/links, and owner from the roster — so an agent queries the map (`graph.py query --symbol/--path/--dir`) instead of reading all the files. Measured **99.0% token savings on this repo** (4,700 vs 469,622 tokens for 6 questions). It is only used above a MEASURED threshold: below it iff fewer than 5 files AND fewer than 500 lines, where reading directly is cheaper. `validate.py` FAILs on a stale graph — a lying map is worse than no map.
+
+</details>
+
+<details>
+<summary><strong>Gratis atau berbayar?</strong></summary>
+
+The skill is free (MIT), no server, no account. A hosted Pro server (live presence, atomic claims, and the rest) is still a plan, not a product — it gets validated with 5–10 users first; there is no final price yet.
+
+</details>
+
+<details>
+<summary><strong>Apa yang baru di v2.8.0?</strong></summary>
+
+Graphyfy (the code graph `team/graph.json`, the freshness gate in `validate.py`/`doctor.py`, the measured threshold) and the new tesseract icon above. Details: [`CHANGELOG.md`](CHANGELOG.md).
+
+</details>
 
 ## Version history
 
 | Version | What it added |
 |---|---|
+| **v2.8.0** | Graphyfy — the code graph (`team/graph.json`): a map of every file (location, size, links, owner) the agent queries instead of reading all the files; measured 99.0% token savings on this repo; used only above a MEASURED threshold (below it iff < 5 files AND < 500 lines — direct reading is cheaper there); `validate.py`/`doctor.py` FAIL on a stale graph (freshness is diff-based: a commit that only changes the graph stays fresh). Two v0.1 bugs fixed (`.github/` skipped by `startswith(".git")`; old 10/1,000 OR threshold constants). New tesseract icon + short README with FAQ. No new config knobs — the threshold is a documented constant in `graph.py`. See `docs/v2.8-design.md` and `simulations/v2.8.0-evidence.md`. |
 | **v2.7.0** | Closes the three holes v2.6.0 left open, no new features: behind-skew clock detection (a claim's `started_at` more than 15 minutes BEFORE its creation base commit's timestamp FAILS — `created_base_commit`, recorded once at claim time and never mutated, falling back to `base_commit`; claims without a resolvable base are skipped, not failed); duplicate `created_seq` (two ACTIVE claims sharing one `created_seq` FAIL — the race `next_created_seq` always admitted); entry line citations (a code entry is now `file:function#line` — new/changed code entries MUST carry the definition line, old ones only warn, `reverify` (re)pins the line when the symbol moves). No new config knobs — the grace is the existing `grace_minutes` (15). See `docs/v2.7-design.md` and `simulations/v2.7.0-evidence.md`. |
 | **v2.6.0** | Orca features — fan-out, decision gates, typed completion receipts, formal reviews, as file records (no server): `scripts/fanout.py` (one prompt across N member claims, scorecard compare, one recorded decision; ×N tokens, opt-in only); `scripts/gates.py` (typed decision gates that block claims and PRD done until resolved by someone entitled or waived by a human); receipts (`claim.py done` now files a typed receipt — `--outcome` + `--summary` required, no silent done; signed when `require_signatures` is on and the filer is human); `scripts/reviews.py` (approve / request-changes by a roster member other than the work's owner; latest request-changes blocks the PRD done-gate; follow-up claims via `--review`). `validate.py`/`doctor.py` (check 11) cover all four new record types. No new config knobs. See `docs/v2.6-design.md` and `simulations/v2.6.0-evidence.md`. |
 | **v2.5.0** | Hardening release — closes every remaining hole the rare-case round found, no new features: sabotage detection (`validate.py` FAILS on a deleted `team/` record in the push range, on a work commit touching a claimed file without a matching `[claim #N]` trailer, and on a malformed or dangling `events.jsonl` line); ghost claims (a claim whose owner is gone from the roster is automatically non-blocking and flagged for release); dependency cycles (DFS over `depends_on` — `check`/`validate`/`reverify` FAIL, `register`/`improve` refuse the closing edge); history-rewrite detection (`team/config.json` records the last-known-main-SHA — `validate.py`/`sync_check` FAIL when it is no longer an ancestor of `origin/main`); clock-skew gate (a claim timestamp more than 15 minutes in the future FAILS, as do `expires_at`/`heartbeat_at` before `started_at`); mailbox signatures (when `require_signatures` is on, human mail MUST carry a valid `sig` — new `scripts/mailbox.py sign/check`); claims may not cover `team/` paths; duplicate display names FAIL. See `docs/v2.5-design.md` and `simulations/v2.5.0-evidence.md`. |
@@ -45,12 +89,6 @@ It works for any job, not just code: a website-build team, a software team, an o
 | **v1.1** | Work ledger — claim before you work; one file, one owner at a time. |
 
 Full details: [`CHANGELOG.md`](CHANGELOG.md).
-
-## Description
-
-**TheRoster is an Agent Skill that gives every AI the same team — so disconnected AIs know their teammates, claim work without colliding, reuse features instead of rebuilding them, continue each other's work in place, finish with a typed receipt, get reviewed by a teammate, and trace every task back to a PRD item.**
-
-No server, no protocol, no new account — just sharded team state synced through git: one file per roster member, claim, feature, PRD item, fan-out group, decision gate, receipt, and review, plus a config, a generated index, an append-only event log, and a per-agent mailbox — checked by a pre-push hook and again by the same checks running in CI.
 
 ## How it works
 
@@ -183,7 +221,7 @@ Honest limits, stated plainly. v2 narrows every one of these; none of them is cl
 
 ```
 skills/team-roster/
-├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.7.0)
+├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.8.0)
 ├── examples/
 │   └── starter-repo/       # copyable starter repo (v2 layout) — `cp -r examples/starter-repo/* .`
 │       ├── team/           # config.json, roster/, claims/, features/, prd/, events.jsonl, mailbox/,
@@ -198,6 +236,7 @@ skills/team-roster/
 │   ├── fanout.py             # fan-out groups: create / add / compare / decide / cancel / list / check (v2.6)
 │   ├── features.py           # search / register / use / improve / deprecate / cancel / reverify / check
 │   ├── gates.py              # decision gates: create / list / resolve / waive / check (v2.6)
+│   ├── graph.py              # Graphyfy: build / check / query team/graph.json (v2.8)
 │   ├── mailbox.py            # sign / check mailbox lines (v2.5)
 │   ├── prd.py                # PRD items: create / list / status / check — where the work comes from
 │   ├── receipts.py           # typed completion receipts: list / check / show (v2.6)
@@ -222,7 +261,7 @@ skills/team-roster/
     └── examples.md           # 4 ready teams in the sharded layout
 ```
 
-At the repo root: `CONTRIBUTING.md` (fork → feature branch → claim first → PR), `.github/PULL_REQUEST_TEMPLATE.md` (PR checklist), `.gitignore` (`__pycache__/`, `*.pyc`).
+At the repo root: `CONTRIBUTING.md` (fork → feature branch → claim first → PR), `.github/PULL_REQUEST_TEMPLATE.md` (PR checklist), `.gitignore` (`__pycache__/`, `*.pyc`), `assets/theroster-icon.webp` (the skill icon, shown at the top of this README).
 
 ## Examples
 
@@ -230,12 +269,14 @@ See `skills/team-roster/references/examples.md`: a website-build team, a softwar
 
 ## Simulations
 
-Eleven scenarios, run against the real skill scripts (not mocks) — claim
+Thirteen scenarios, run against the real skill scripts (not mocks) — claim
 collisions, duplicate features, a PRD split across AIs, a mid-work
 cancellation, a careless contract change, a stranger claiming to be a
-teammate, worktree-per-claim, signed identity, hardening, and the four Orca
-features (fan-out, decision gates, typed receipts, formal reviews). 424
-steps, all 424 gates behaved as expected. Full list, what each
+teammate, worktree-per-claim, signed identity, hardening, the four Orca
+features (fan-out, decision gates, typed receipts, formal reviews), the
+three v2.7.0 hole-closings, and Graphyfy (v2.8.0: build the code graph,
+query a slice, stale graph fails, below-threshold repo passes, graph
+committed). 494 steps, all 494 gates behaved as expected. Full list, what each
 one proves, and how to re-run them: [`docs/simulations.md`](docs/simulations.md)
 (runner + transcript in [`simulations/`](simulations/)).
 

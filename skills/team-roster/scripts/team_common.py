@@ -63,7 +63,7 @@ SEMVER_RE = re.compile(
 DEFAULT_CONFIG = {
     "canonical_remote": "origin",
     "canonical_branch": "main",
-    "skill_version": "2.7.0",
+    "skill_version": "2.8.0",
     "claim_ttl_minutes": 120,
     "heartbeat_minutes": 30,
     "grace_minutes": 15,

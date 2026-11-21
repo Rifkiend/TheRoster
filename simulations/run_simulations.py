@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simulasi bervariasi TheRoster — 12 skenario, pakai script ASLI skill (bukan mock).
+"""Simulasi bervariasi TheRoster — 13 skenario, pakai script ASLI skill (bukan mock).
 
 Setiap skenario jalan di salinan segar starter-repo, merekam perintah persis,
 exit code, dan output asli tiap langkah. Hasil: transcripts.json (+ README.md).
@@ -1656,6 +1656,7 @@ def s10():
           "p = 'team/claims/t-1004.json'\n"
           "c = json.load(open(p))\n"
           "c['started_at'] = now.strftime('%Y-%m-%dT%H:%M:%SZ')\n"
+          "c['heartbeat_at'] = now.strftime('%Y-%m-%dT%H:%M:%SZ')\n"
           "c['expires_at'] = (now - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')\n"
           "json.dump(c, open(p, 'w'), indent=2, sort_keys=True)\n"
           "print('expires_at 1h sebelum started_at')"],
@@ -2541,6 +2542,13 @@ def s12():
                "files": files, "started_at": started, "heartbeat_at": heartbeat,
                "expires_at": expires, "created_seq": created_seq,
                "claim_seq": claim_seq}
+        # Penelepon menghitung started/heartbeat/expires dari now()
+        # yang BERBEDA per argumen — kalau batas detik terlewati di
+        # antaranya, heartbeat bisa 1 detik SEBELUM started dan gate
+        # "heartbeat cannot predate the claim" (bukan gate yang diuji)
+        # yang gagal. Samakan: heartbeat saat klaim dibuat == started.
+        if rec["heartbeat_at"] < rec["started_at"]:
+            rec["heartbeat_at"] = rec["started_at"]
         code = ("import json\n"
                 "c = json.load(open('team/claims/t-1201.json'))\n"
                 "c.update(%r)\n" % rec)
@@ -2741,14 +2749,290 @@ def s12():
     return scn
 
 
+# ---------------------------------------------------------------- S13: v2.8.0
+def s13():
+    """v2.8.0 regression: Graphyfy — build the code graph
+    (team/graph.json), query a slice, stale graph FAILs validate,
+    below-threshold repo without a graph passes, graph committed;
+    .github/ regression (bug startswith ".git" v0.1); threshold
+    numbers locked (4 file/400 baris below, 16/355 above).
+    Same git-backed harness as s12 (bare remote + clone, plain
+    commits — no signatures needed here, require_signatures stays
+    off). The freshness rule is diff-based, not commit_sha == HEAD:
+    a commit that only changes team/graph.json does NOT make the
+    graph stale (the graph never maps itself) — §D proves it."""
+    from datetime import datetime, timezone
+    base = WORK / "s13-graphyfy-v280"
+    if base.exists():
+        shutil.rmtree(base)
+    base.mkdir(parents=True)
+    git(["init", "--bare", "-b", "main", "remote.git"], base)
+    git(["clone", "-q", "remote.git", "work-main"], base)
+    main = base / "work-main"
+    git(["config", "user.email", "sim@theroster.test"], main)
+    git(["config", "user.name", "Sim"], main)
+    shutil.copytree(STARTER, main, dirs_exist_ok=True)
+    git(["add", "-A"], main)
+    git(["commit", "-q", "-m", "starter"], main)
+    git(["push", "-q", "origin", "main"], main)
+    rc, head_sha = sh(["git", "rev-parse", "HEAD"], main)
+    assert rc == 0, head_sha
+    head_sha = head_sha.strip()
+    scn = {"id": "s13", "title": "Graphyfy v2.8.0: build graph, query slice, basi FAIL, ambang LOLOS, graph ke-commit",
+           "team": "Tim bangun website (3 AI + owner)",
+           "story": "Roster bilang SIAPA, klaim bilang SIAPA LAGI NGAPAIN, "
+                    "registry bilang APA YANG SUDAH ADA — tapi tidak ada "
+                    "yang bilang file-nya DI MANA, SEBERAPA BESAR, dan "
+                    "SIAPA PEMILIKNYA. Graphyfy adalah peta keempat itu: "
+                    "team/graph.json yang ditanya agent, bukan dibaca "
+                    "semua file. v2.8.0 memasukkannya ke skill dengan "
+                    "ambang TERUKUR dan gate kesegaran di validate.",
+           "tanpa_roster": "Agent yang butuh satu file membaca seluruh "
+                           "repo; peta yang basi menyesatkan SEMUA agent "
+                           "sekaligus tanpa ada yang sadar; repo kecil "
+                           "dipaksa membangun peta yang lebih mahal dari "
+                           "repo-nya sendiri.",
+           "steps": []}
+    graph = ["python3", str(SCRIPTS / "graph.py")]
+    graph_build = graph + ["build", "--repo", ".", "--out", "team/graph.json"]
+    graph_check = graph + ["check", "--repo", ".", "--graph", "team/graph.json"]
+    validate = ["python3", str(SCRIPTS / "validate.py"), "team"]
+
+    def expect_fail_with(label, argv, needle, cwd, note=""):
+        """Run argv; the step only passes when the command FAILS and
+        the failure names the expected gate — a failure for the wrong
+        reason is a failed gate, not a passed test."""
+        return step(scn, label, ["python3", "-c",
+            "import subprocess\n"
+            "p = subprocess.run(%r, capture_output=True, text=True)\n"
+            "print(p.stdout + p.stderr)\n"
+            "assert p.returncode != 0, 'expected failure, got exit 0'\n"
+            "assert %r in p.stdout + p.stderr, 'failure is not the expected one'\n"
+            "print('ASSERT OK: failed as expected')" % (argv, needle)],
+            cwd, "pass", note)
+
+    # --- A0. Tanpa graph, repo di atas ambang: warning, bukan FAIL --
+    step(scn, "[A0] validate.py LOLOS walau team/graph.json belum ada",
+         validate, main, "pass",
+         "Tim lama yang belum membangun graph tidak di-brick — "
+         "yang hilang hanya peta, bukan kebenaran.")
+    step(scn, "[A0b] ...tapi validate MEMPERINGATKAN graph hilang (repo di atas ambang)",
+         ["bash", "-c", "python3 %s team | grep -q 'above the graph threshold'"
+          % str(SCRIPTS / "validate.py")],
+         main, "pass",
+         "Warning, bukan FAIL — dengan perintah build-nya.")
+
+    # --- A. Build + query ------------------------------------------
+    step(scn, "[A1] graph.py build --repo . --out team/graph.json",
+         graph_build, main, "pass",
+         "Satu file yang di-commit: team/graph.json (shard opsional, "
+         "tidak dipakai di sini).")
+    step(scn, "[A2] graph.json: commit_sha == HEAD, 15 file, tanpa threshold_note, index.json TIDAK dipetakan",
+         ["python3", "-c",
+          "import json\n"
+          "g = json.load(open('team/graph.json'))\n"
+          "assert g['commit_sha'] == %r, g['commit_sha']\n"
+          "assert g['stats']['files'] == 15, g['stats']\n"
+          "assert g['threshold_note'] is None, g['threshold_note']\n"
+          "paths = [f['path'] for f in g['files']]\n"
+          "assert 'team/index.json' not in paths, paths\n"
+          "assert 'team/graph.json' not in paths, paths\n"
+          "print('ASSERT OK: 15 file, commit_sha == HEAD, .gitignore dihormati (index.json tidak masuk graph)')"
+          % head_sha],
+         main, "pass",
+         "Starter repo: 16 file di disk, 15 yang dipetakan — "
+         "team/index.json adalah generated + gitignored, jadi "
+         ".gitignore (via git ls-files) mengeluarkannya. Graph juga "
+         "tidak memetakan dirinya sendiri.")
+    file_action(scn, "[A2b] Tulis .github/workflows/ci.yml",
+                ".github/workflows/ci.yml",
+                "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n", main)
+    file_action(scn, "[A2b2] Tulis .github/ISSUE_TEMPLATE/bug.md",
+                ".github/ISSUE_TEMPLATE/bug.md",
+                "# Bug\n", main)
+    step(scn, "[A2b3] Rebuild graph — .github harus ikut dipetakan",
+         graph_build, main, "pass")
+    step(scn, "[A2b4] .github/workflows/ci.yml + .github/ISSUE_TEMPLATE/bug.md ADA di graph (17 file)",
+         ["python3", "-c",
+          "import json\n"
+          "g = json.load(open('team/graph.json'))\n"
+          "paths = [f['path'] for f in g['files']]\n"
+          "assert '.github/workflows/ci.yml' in paths, paths\n"
+          "assert '.github/ISSUE_TEMPLATE/bug.md' in paths, paths\n"
+          "assert g['stats']['files'] == 17, g['stats']\n"
+          "print('ASSERT OK: .github dipetakan (regresi bug startswith .git v0.1)')"],
+         main, "pass",
+         "Bug v0.1 (temuan uji GitHub): `d.startswith('.git')` ikut "
+         "melewatkan direktori `.github` — requests kehilangan 19 file. "
+         "v2.8.0 memakai pencocokan eksak (SKIP_DIRS).")
+    step(scn, "[A2c] Jalur fallback non-git (os.walk) JUGA memetakan .github/",
+         ["python3", "-c",
+          "import os, sys, tempfile\n"
+          "sys.path.insert(0, %r)\n"
+          "import graph\n"
+          "d = tempfile.mkdtemp(prefix='nogit-')\n"
+          "os.makedirs(os.path.join(d, '.github', 'workflows'))\n"
+          "open(os.path.join(d, '.github', 'workflows', 'ci.yml'), 'w').write('name: ci\\n')\n"
+          "open(os.path.join(d, 'a.py'), 'w').write('x = 1\\n')\n"
+          "paths, _b, _s, gi, _t = graph.collect_files(d)\n"
+          "assert '.github/workflows/ci.yml' in paths, paths\n"
+          "assert gi is False, gi\n"
+          "print('ASSERT OK: walk fallback memetakan .github/ (gitignore tidak diterapkan di sana)')"
+          % str(SCRIPTS)],
+         main, "pass",
+         "Bug yang sama hidup di jalur fallback — diuji terpisah, bukan "
+         "cuma jalur git.")
+    step(scn, "[A3] query --symbol login -> src/auth/login.py baris 14",
+         ["bash", "-c", "python3 %s query --graph team/graph.json --symbol login | grep -q 'src/auth/login.py'"
+          % str(SCRIPTS / "graph.py")],
+         main, "pass",
+         "Simbol ditemukan tanpa membaca satu file pun.")
+    step(scn, "[A3b] ...dengan line 14 yang benar (bukan cuma file-nya)",
+         ["bash", "-c", "python3 %s query --graph team/graph.json --symbol login | grep -q '\"line\": 14'"
+          % str(SCRIPTS / "graph.py")],
+         main, "pass")
+    step(scn, "[A4] query --path src/auth/login.py -> owner 'owner' (via claim t-001)",
+         ["bash", "-c", "python3 %s query --graph team/graph.json --path src/auth/login.py | grep -q '\"owner\": \"owner\"'"
+          % str(SCRIPTS / "graph.py")],
+         main, "pass",
+         "Owner dari klaim aktif t-001 — graph menjawab 'tanya siapa', "
+         "bukan 'terkunci atau tidak' (itu urusan claim.py check).")
+    step(scn, "[A5] query --dir src -> 1 file (slice, bukan seluruh graph)",
+         ["bash", "-c", "python3 %s query --graph team/graph.json --dir src | grep -q '\"count\": 1'"
+          % str(SCRIPTS / "graph.py")],
+         main, "pass",
+         "Yang menghemat token adalah slice-nya, bukan graph utuhnya.")
+    step(scn, "[A6] query membawa label 'terakhir diketahui'",
+         ["bash", "-c", "python3 %s query --graph team/graph.json --symbol login | grep -q 'terakhir diketahui'"
+          % str(SCRIPTS / "graph.py")],
+         main, "pass",
+         "Cermin tidak pernah pura-pura tahu keadaan sekarang.")
+
+    # --- B. Graph basi FAIL ----------------------------------------
+    file_action(scn, "[B1] Tulis src/newfile.py (file kerja baru, tidak diklaim siapa pun)",
+                "src/newfile.py",
+                "def baru():\n    return 1\n", main)
+    step(scn, "[B1b] Commit file kerja itu saja (graph TIDAK ikut di-commit)",
+         ["git", "add", "src/newfile.py"], main, "pass",
+         "git add eksplisit per path — `git add -A` akan ikut "
+         "menangkap team/graph.json yang belum di-commit.")
+    step(scn, "[B1c] Commit 'tambah src/newfile.py' — HEAD bergerak",
+         ["git", "commit", "-q", "-m", "tambah src/newfile.py"], main, "pass")
+    expect_fail_with("[B2] validate.py HARUS GAGAL — graph basi",
+                     validate, "is STALE (basi)", main,
+                     "Satu file yang dipetakan berubah sejak commit_sha "
+                     "graph — peta bohong, push ditahan.")
+    expect_fail_with("[B3] graph.py check HARUS GAGAL — GRAPH BASI yang sama",
+                     graph_check, "GRAPH BASI", main,
+                     "Satu sumber kebenaran kesegaran (graph_freshness) "
+                     "untuk CLI dan validate.")
+    step(scn, "[B4] Rebuild graph (graph baru mencatat HEAD yang baru)",
+         graph_build, main, "pass")
+    step(scn, "[B5] validate.py LOLOS lagi — graph segar",
+         validate, main, "pass")
+
+    # --- C. Repo di bawah ambang tanpa graph: LOLOS -----------------
+    tiny = WORK / "s13-tiny"
+    if tiny.exists():
+        shutil.rmtree(tiny)
+    tiny.mkdir(parents=True)
+    git(["init", "--bare", "-b", "main", "remote.git"], tiny)
+    git(["clone", "-q", "remote.git", "work"], tiny)
+    tw = tiny / "work"
+    git(["config", "user.email", "sim@theroster.test"], tw)
+    git(["config", "user.name", "Sim"], tw)
+    # Total baris fixture = 400 persis: app.py 300 + util.py 55 +
+    # config.json 26 + owner.json 19. Angka 4 file / 400 baris ini
+    # yang dikunci [C3]/[C4] sebagai "di bawah ambang".
+    _app = ["def main():", "    print('hi')", "",
+            "if __name__ == '__main__':", "    main()"]
+    _app += ["# padding %d" % i for i in range(295)]
+    (tw / "app.py").write_text("\n".join(_app) + "\n")
+    _util = ["def bantu():", "    return 42"]
+    _util += ["# padding %d" % i for i in range(53)]
+    (tw / "util.py").write_text("\n".join(_util) + "\n")
+    (tw / "team").mkdir()
+    (tw / "team" / "claims").mkdir()
+    (tw / "team" / "features").mkdir()
+    (tw / "team" / "prd").mkdir()
+    (tw / "team" / "roster").mkdir()
+    shutil.copy(STARTER / "team" / "config.json", tw / "team" / "config.json")
+    shutil.copy(STARTER / "team" / "roster" / "owner.json",
+                tw / "team" / "roster" / "owner.json")
+    git(["add", "-A"], tw)
+    git(["commit", "-q", "-m", "tiny repo"], tw)
+    git(["push", "-q", "origin", "main"], tw)
+    step(scn, "[C1] validate.py LOLOS di repo kecil TANPA graph",
+         validate, tw, "pass",
+         "Repo di bawah ambang (4 file, 400 baris) tanpa graph = OK, "
+         "bukan FAIL — baca langsung memang lebih murah di sana.")
+    step(scn, "[C2] ...dan ringkasan OK menyebut 'below threshold'",
+         ["bash", "-c", "python3 %s team | grep -q 'below threshold'"
+          % str(SCRIPTS / "validate.py")],
+         tw, "pass")
+    step(scn, "[C3] count_for_threshold: 4 file, 400 baris PERSIS (ambang AND, bukan OR)",
+         ["python3", "-c",
+          "import sys\n"
+          "sys.path.insert(0, %r)\n"
+          "import graph\n"
+          "n, lines = graph.count_for_threshold('.')\n"
+          "assert (n, lines) == (4, 400), (n, lines)\n"
+          "print('ASSERT OK: below threshold (4 files, 400 lines):', n, lines)"
+          % str(SCRIPTS)],
+         tw, "pass",
+         "4 file: app.py (300 baris), util.py (55), team/config.json "
+         "(26), team/roster/owner.json (19) = 400 baris. Kalau salah "
+         "satu kaki AND tidak terpenuhi (mis. 15 file tapi 283 baris, "
+         "seperti starter di [A2]), repo tetap di ATAS ambang.")
+    step(scn, "[C4] Kunci angka ambang (below_threshold): (4,400) bawah; (16,355) atas; batas (5,499)/(4,500) atas",
+         ["python3", "-c",
+          "import sys\n"
+          "sys.path.insert(0, %r)\n"
+          "import graph\n"
+          "assert graph.below_threshold(4, 400) is True\n"
+          "assert graph.below_threshold(16, 355) is False\n"
+          "assert graph.below_threshold(5, 499) is False\n"
+          "assert graph.below_threshold(4, 500) is False\n"
+          "assert graph.below_threshold(4, 499) is True\n"
+          "print('ASSERT OK: ambang TERUKUR terkunci')"
+          % str(SCRIPTS)],
+         tw, "pass",
+         "Repo 16 file / 355 baris DI ATAS ambang — kaki file-nya yang "
+         "lewat, walau baris di bawah 500. Aturan OR (lama) akan salah "
+         "menyebutnya di bawah ambang lewat kaki baris.")
+
+    # --- D. Graph ikut ke-commit -----------------------------------
+    step(scn, "[D1] Commit team/graph.json SAJA + push (commit graph)",
+         ["git", "add", "team/graph.json"], main, "pass",
+         "Graph dibangun SETELAH commit kerja, lalu di-commit sendiri — "
+         "itu urutan yang benar.")
+    step(scn, "[D1b] Commit 'graph: team/graph.json (Graphyfy v2.8)' + push",
+         ["bash", "-c", "git commit -q -m 'graph: team/graph.json (Graphyfy v2.8)' && git push -q origin main"],
+         main, "pass")
+    step(scn, "[D2] validate.py LOLOS — commit graph saja TIDAK membuat graph basi",
+         validate, main, "pass",
+         "BUKTI aturan diff: commit_sha graph != HEAD sekarang, tapi "
+         "satu-satunya yang berubah sejak commit_sha adalah graph itu "
+         "sendiri — peta masih benar. Aturan commit_sha == HEAD mentah "
+         "tidak akan pernah lolos di sini.")
+    step(scn, "[D3] graph.py check LOLOS juga",
+         graph_check, main, "pass")
+    step(scn, "[D4] team/graph.json ter-commit: terlacak + ada di origin/main",
+         ["bash", "-c", "git ls-files team/graph.json | grep -qx 'team/graph.json' && git ls-tree -r origin/main --name-only | grep -qx 'team/graph.json'"],
+         main, "pass",
+         "Graph ikut ke-commit dan ikut ke-push — bukan file lokal saja.")
+    validate_end(scn, main)
+    return scn
+
+
 def main():
     WORK.mkdir(exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
-    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7(), s8(), s9(), s10(), s11(), s12()]
+    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7(), s8(), s9(), s10(), s11(), s12(), s13()]
     total_steps = sum(len(s["steps"]) for s in scenarios)
     gates_ok = sum(1 for s in scenarios for st in s["steps"] if st.get("gate_ok"))
     doc = {
-        "generated_by": "run_simulations.py — script ASLI TheRoster v2.7.0",
+        "generated_by": "run_simulations.py — script ASLI TheRoster v2.8.0",
         "repo": "Rifkiend/TheRoster",
         "scenarios": scenarios,
         "summary": {"scenarios": len(scenarios), "steps": total_steps,
