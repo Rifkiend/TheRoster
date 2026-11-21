@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simulasi bervariasi TheRoster — 11 skenario, pakai script ASLI skill (bukan mock).
+"""Simulasi bervariasi TheRoster — 12 skenario, pakai script ASLI skill (bukan mock).
 
 Setiap skenario jalan di salinan segar starter-repo, merekam perintah persis,
 exit code, dan output asli tiap langkah. Hasil: transcripts.json (+ README.md).
@@ -154,7 +154,7 @@ def s2():
     step(scn, "Coba daftarkan login-api lagi dengan id yang sama",
          ["python3", str(SCRIPTS / "features.py"), "register", "--id", "login-api",
           "--name", "Login API baru", "--does", "Login ulang",
-          "--entry", "src/auth/login.py:login", "--owner", "assistant",
+          "--entry", "src/auth/login.py:login#14", "--owner", "assistant",
           "--keywords", "login", "auth", "--features-dir", "team/features",
           "--repo-root", "."], d, "fail", "Id duplikat DITOLAK — tidak ada dua fitur kembar.")
     step(scn, "Klaim kerjaan profil yang memakai login-api (bukan membangun ulang)",
@@ -210,7 +210,7 @@ def s3():
     step(scn, "Daftarkan payment-api sebagai experimental",
          ["python3", str(SCRIPTS / "features.py"), "register", "--id", "payment-api",
           "--name", "Payment API", "--does", "Terima pembayaran, kembalikan status order",
-          "--entry", "src/payment.py:charge", "--files", "src/payment.py",
+          "--entry", "src/payment.py:charge#1", "--files", "src/payment.py",
           "--owner", "assistant", "--keywords", "payment", "bayar", "checkout",
           "--status", "experimental", "--breaking", "false",
           "--features-dir", "team/features", "--repo-root", "."], d, "pass")
@@ -312,14 +312,14 @@ def s5():
                 login_py + "\n\ndef login_v2(email, password):\n    \"\"\"Versi baru: kembalikan objek sesi, bukan token string.\"\"\"\n    return {\"session\": {\"email\": email}}\n", d)
     step(scn, "Ganti entry kontrak TANPA alasan dan TANPA bump major",
          ["python3", str(SCRIPTS / "features.py"), "improve", "--id", "login-api",
-          "--by", "assistant", "--entry", "src/auth/login.py:login_v2",
+          "--by", "assistant", "--entry", "src/auth/login.py:login_v2#26",
           "--breaking", "false", "--features-dir", "team/features",
           "--repo-root", "."], d, "fail",
          "Kontrak tidak boleh berubah diam-diam: butuh --bump major + --contract-change.")
     step(scn, "Ganti entry DENGAN --bump major + --contract-change",
          ["python3", str(SCRIPTS / "features.py"), "improve", "--id", "login-api",
           "--by", "assistant", "--bump", "major",
-          "--entry", "src/auth/login.py:login_v2",
+          "--entry", "src/auth/login.py:login_v2#26",
           "--contract-change", "login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi",
           "--breaking", "true",
           "--breaking-notes", "login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi",
@@ -332,7 +332,7 @@ def s5():
     step(scn, "Daftarkan checkout-api yang bergantung ke login-api@2.0.0",
          ["python3", str(SCRIPTS / "features.py"), "register", "--id", "checkout-api",
           "--name", "Checkout API", "--does", "Checkout memakai login-api untuk sesi",
-          "--entry", "src/checkout.py:checkout", "--files", "src/checkout.py",
+          "--entry", "src/checkout.py:checkout#1", "--files", "src/checkout.py",
           "--owner", "assistant", "--keywords", "checkout", "bayar",
           "--depends-on", "login-api@2.0.0", "--status", "experimental",
           "--breaking", "false", "--features-dir", "team/features",
@@ -1003,9 +1003,24 @@ def s9():
          claim + ["--task", "t-908", "--title", "Uji batas hidup",
                   "--owner", "assistant", "--files", "tests/test_b.py"],
          main, "pass", "created_seq 6.")
+    step(scn, "[main] B9a: buat commit kosong 25 jam lalu — base t-908 yang setia",
+         ["python3", "-c",
+          "import os, subprocess\n"
+          "from datetime import datetime, timedelta, timezone\n"
+          "old = datetime.now(timezone.utc) - timedelta(hours=25)\n"
+          "stamp = '@%d +0000' % int(old.timestamp())\n"
+          "env = dict(os.environ, GIT_AUTHOR_DATE=stamp, GIT_COMMITTER_DATE=stamp)\n"
+          "r = subprocess.run(['git', 'commit', '-q', '--allow-empty', '-m', 'old base for t-908'],\n"
+          "                   capture_output=True, text=True, env=env)\n"
+          "assert r.returncode == 0, r.stderr\n"
+          "print('old base commit:', subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip())"],
+         main, "pass",
+         "Klaim yang genuinely 25 jam tua membawa base 25 jam tua juga. Tanpa base tua, "
+         "gate behind-skew v2.7 akan salah mengira klaim tua sebagai jam yang ketinggalan. "
+         "Commit kosong ini tidak menyentuh team/ — tidak kena cek tanda tangan.")
     step(scn, "[main] B9: mundurkan started_at t-908 ke 25 jam lalu, heartbeat tetap segar",
          ["python3", "-c",
-          "import json\n"
+          "import json, subprocess\n"
           "from datetime import datetime, timedelta, timezone\n"
           "now = datetime.now(timezone.utc)\n"
           "p = 'team/claims/t-908.json'\n"
@@ -1014,10 +1029,14 @@ def s9():
           "c['started_at'] = fmt(now - timedelta(hours=25))\n"
           "c['heartbeat_at'] = fmt(now)\n"
           "c['expires_at'] = fmt(now + timedelta(hours=2))\n"
+          "sha = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()\n"
+          "c['base_commit'] = sha\n"
+          "c['created_base_commit'] = sha\n"
           "json.dump(c, open(p, 'w'), indent=2, sort_keys=True)\n"
-          "print('t-908: started 25h lalu, heartbeat sekarang, expiry 2h lagi')"],
+          "print('t-908: started 25h lalu, heartbeat sekarang, expiry 2h lagi, base = commit 25h lalu')"],
          main, "pass",
-         "Kasus langka §10: heartbeat selamanya — klaim yang tidak pernah mati selama owner-nya rajin heartbeat.")
+         "Kasus langka §10: heartbeat selamanya — klaim yang tidak pernah mati selama owner-nya rajin heartbeat. "
+         "Base-nya ikut dimundurkan ke commit 25 jam lalu (B9a): klaim tua yang setia membawa base tua.")
     step(scn, "[main] B10: is_blocking(t-908) HARUS False — melewati max_lifetime_hours 24",
          ["python3", "-c",
           "import sys, json\n"
@@ -1457,12 +1476,12 @@ def s10():
          "Entry fitur adalah pointer ke simbol nyata — file dan simbolnya harus ada.")
     step(scn, "[main] E1: register feat-a (tanpa dependensi)",
          feat_register + ["--id", "feat-a", "--name", "Fitur A", "--does", "melakukan A",
-                          "--entry", "src/feat_a.py:run_a", "--owner", "assistant", "--files", "src/feat_a.py",
+                          "--entry", "src/feat_a.py:run_a#1", "--owner", "assistant", "--files", "src/feat_a.py",
                           "--keywords", "a", "--breaking", "false"],
          main, "pass")
     step(scn, "[main] E2: register feat-b yang depend ke feat-a",
          feat_register + ["--id", "feat-b", "--name", "Fitur B", "--does", "melakukan B",
-                          "--entry", "src/feat_b.py:run_b", "--owner", "assistant", "--files", "src/feat_b.py",
+                          "--entry", "src/feat_b.py:run_b#1", "--owner", "assistant", "--files", "src/feat_b.py",
                           "--keywords", "b", "--depends-on", "feat-a@1.0.0", "--breaking", "false"],
          main, "pass")
     step(scn, "[main] E3: improve feat-a agar depend ke feat-b HARUS DITOLAK — menutup siklus",
@@ -1502,7 +1521,7 @@ def s10():
          feat_check, main, "pass")
     step(scn, "[main] E10: register feat-c (tanpa dependensi)",
          feat_register + ["--id", "feat-c", "--name", "Fitur C", "--does", "melakukan C",
-                          "--entry", "src/feat_c.py:run_c", "--owner", "assistant", "--files", "src/feat_c.py",
+                          "--entry", "src/feat_c.py:run_c#1", "--owner", "assistant", "--files", "src/feat_c.py",
                           "--keywords", "c", "--breaking", "false"],
          main, "pass")
     step(scn, "[main] E11: tulis 3-cycle A→B→C→A langsung ke file",
@@ -2433,14 +2452,303 @@ def s11():
     return scn
 
 
+# ---------------------------------------------------------------- S12: v2.7.0
+def s12():
+    """v2.7.0 regression: close the open holes — behind-skew clock
+    detection (started_at vs creation-base commit timestamp),
+    duplicate created_seq under true concurrency, and entry line
+    citations (file:function#line). Same git-backed harness as
+    s9/s10/s11 (bare remote + clone, plain commits — no signatures
+    needed here, require_signatures stays off)."""
+    import shlex
+    from datetime import datetime, timedelta, timezone
+    base = WORK / "s12-holes-v270"
+    if base.exists():
+        shutil.rmtree(base)
+    base.mkdir(parents=True)
+    git(["init", "--bare", "-b", "main", "remote.git"], base)
+    git(["clone", "-q", "remote.git", "work-main"], base)
+    main = base / "work-main"
+    git(["config", "user.email", "sim@theroster.test"], main)
+    git(["config", "user.name", "Sim"], main)
+    shutil.copytree(STARTER, main, dirs_exist_ok=True)
+    git(["add", "-A"], main)
+    git(["commit", "-q", "-m", "starter"], main)
+    git(["push", "-q", "origin", "main"], main)
+    rc, head_sha = sh(["git", "rev-parse", "HEAD"], main)
+    assert rc == 0, head_sha
+    head_sha = head_sha.strip()
+    rc, head_ts = sh(["git", "show", "-s", "--format=%cI", "HEAD"], main)
+    assert rc == 0, head_ts
+    base_dt = datetime.fromisoformat(head_ts.strip()).astimezone(timezone.utc)
+    scn = {"id": "s12", "title": "Tutup lubang v2.7.0: behind-skew, created_seq ganda, line citation",
+           "team": "Tim bangun website (3 AI + owner)",
+           "story": "Tiga lubang yang dibiarkan terbuka di v2.6.0: jam yang "
+                    "ketinggalan tidak terdeteksi (hanya arah maju yang "
+                    "tertangkap), dua klaim bisa berbagi created_seq yang "
+                    "sama tanpa ada yang protes, dan entry registry hanya "
+                    "membuktikan simbol ada di file — bukan di baris yang "
+                    "dikutip. v2.7.0 menutup ketiganya dengan sinyal yang "
+                    "sudah ada di record: timestamp base commit, "
+                    "created_seq itu sendiri, dan nomor baris definisi.",
+           "tanpa_roster": "Klaim dari jam yang 3 jam ketinggalan terlihat "
+                           "persis seperti klaim yang memang kedaluwarsa; "
+                           "dua klaim 'dulu' yang sama membuat urutan tidak "
+                           "terdefinisi; registry menunjuk ke baris yang "
+                           "salah dan tetap hijau.",
+           "steps": []}
+    claim = ["python3", str(SCRIPTS / "claim.py"), "claim",
+             "--claims-dir", "team/claims", "--roster", "team/roster",
+             "--config", "team/config.json"]
+    release = ["python3", str(SCRIPTS / "claim.py"), "release",
+               "--claims-dir", "team/claims"]
+    check = ["python3", str(SCRIPTS / "claim.py"), "check",
+             "team/claims", "--roster", "team/roster"]
+    validate = ["python3", str(SCRIPTS / "validate.py"), "team"]
+    feat = ["python3", str(SCRIPTS / "features.py")]
+    feat_check = feat + ["check", "team/features", "--roster", "team/roster",
+                         "--repo-root", "."]
+    feat_register = feat + ["register", "--features-dir", "team/features"]
+    feat_improve = feat + ["improve", "--features-dir", "team/features"]
+    feat_reverify = feat + ["reverify", "--features-dir", "team/features"]
+
+    def expect_fail_with(label, argv, needle, note=""):
+        """Run argv; the step only passes when the command FAILS and
+        the failure names the expected gate — a failure for the wrong
+        reason is a failed gate, not a passed test."""
+        return step(scn, label, ["python3", "-c",
+            "import subprocess\n"
+            "p = subprocess.run(%r, capture_output=True, text=True)\n"
+            "print(p.stdout + p.stderr)\n"
+            "assert p.returncode != 0, 'expected failure, got exit 0'\n"
+            "assert %r in p.stdout + p.stderr, 'failure is not the expected one'\n"
+            "print('ASSERT OK: failed as expected')" % (argv, needle)],
+            main, "pass", note)
+
+    def fmt(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def now_utc():
+        return datetime.now(timezone.utc)
+
+    def forge_step(label, task_id, owner, files, started, heartbeat, expires,
+                   created_seq, claim_seq, with_base=True, note=""):
+        """Write a claim record by hand (cloning t-1201's real record):
+        the way a skewed agent's, or a racing agent's, record would
+        arrive on disk. The forge itself must succeed — the gate under
+        test is claim.py check / validate.py, not the forge."""
+        rec = {"task_id": task_id, "task": "Kerja " + task_id, "owner_id": owner,
+               "files": files, "started_at": started, "heartbeat_at": heartbeat,
+               "expires_at": expires, "created_seq": created_seq,
+               "claim_seq": claim_seq}
+        code = ("import json\n"
+                "c = json.load(open('team/claims/t-1201.json'))\n"
+                "c.update(%r)\n" % rec)
+        if not with_base:
+            code += "c.pop('created_base_commit', None); c.pop('base_commit', None)\n"
+        code += ("json.dump(c, open('team/claims/%s.json', 'w'), indent=2, sort_keys=True)\n"
+                 "print('forged %s')" % (task_id, task_id))
+        return step(scn, label, ["python3", "-c", code], main, "pass", note)
+
+    # --- A. Behind-skew: started_at vs creation-base commit --------
+    step(scn, "[A1] Klaim normal t-1201 (assistant, tests/test_login.py)",
+         claim + ["--task", "t-1201", "--title", "Kerja normal",
+                  "--owner", "assistant", "--files", "tests/test_login.py"],
+         main, "pass",
+         "t-001 starter sudah kedaluwarsa (stealable), jadi file ini bebas diklaim.")
+    step(scn, "[A2] Record t-1201 membawa created_base_commit == HEAD == base_commit",
+         ["python3", "-c",
+          "import json\n"
+          "c = json.load(open('team/claims/t-1201.json'))\n"
+          "assert c['created_base_commit'] == %r, c\n"
+          "assert c['created_base_commit'] == c['base_commit']\n"
+          "print('ASSERT OK: created_base_commit recorded once at claim time')" % head_sha],
+         main, "pass",
+         "Field baru v2.7: base pembuatan yang immutable — jangkar gate behind-skew.")
+    step(scn, "[A3] claim.py check LOLOS untuk klaim normal",
+         check, main, "pass",
+         "started_at ~= base commit timestamp — tidak ada skew.")
+    forge_step("[A4] Tulis klaim t-1202 dengan started_at 3 jam SEBELUM base commit",
+               "t-1202", "assistant", ["src/profile.py"],
+               fmt(now_utc() - timedelta(hours=3)), fmt(now_utc() - timedelta(hours=3)),
+               fmt(now_utc() - timedelta(hours=1)), 42, 42,
+               note="Model setia klaim dari agent yang jamnya ketinggalan 3 jam: "
+                    "started_at, heartbeat, DAN expires ikut mundur — bukan cuma dua yang terakhir.")
+    expect_fail_with("[A5] claim.py check HARUS GAGAL — behind-skew",
+                     check, "minutes BEFORE its creation base",
+                     "Klaim tidak mungkin dibuat sebelum commit yang jadi base-nya ada; "
+                     "jam penulis klaim ketinggalan >15 menit.")
+    expect_fail_with("[A6] validate.py HARUS GAGAL — behind-skew yang sama",
+                     validate, "minutes BEFORE its creation base",
+                     "Dua gate independen membaca timestamp yang sama.")
+    step(scn, "[A7] Perbaiki t-1202 dengan cara yang didokumentasikan: release + re-claim id yang sama",
+         release + ["--task", "t-1202", "--by", "assistant"], main, "pass")
+    step(scn, "[A7b] Re-claim t-1202 (record segar menimpa record skew)",
+         claim + ["--task", "t-1202", "--title", "Kerja skew (ulang)",
+                  "--owner", "assistant", "--files", "src/profile.py"],
+         main, "pass",
+         "Re-claim id yang sama menimpa record lama — jejak audit tetap di events.jsonl.")
+    step(scn, "[A7c] claim.py check LOLOS lagi — papan tidak brick",
+         check, main, "pass")
+    forge_step("[A8] Tulis klaim t-1204 TANPA base (klaim lama / pre-v2.7) dengan started_at -3 jam",
+               "t-1204", "teammate-1", ["src/other.py"],
+               fmt(now_utc() - timedelta(hours=3)), fmt(now_utc() - timedelta(hours=3)),
+               fmt(now_utc() - timedelta(hours=1)), 100, 100, with_base=False,
+               note="Tidak ada sinyal base = tidak ada vonis — gate skip, bukan fail.")
+    step(scn, "[A8b] claim.py check LOLOS — klaim tanpa base tidak false-FAIL",
+         check, main, "pass",
+         "Hanya warning stealable (expired+stale) — itu perilaku lama, bukan gate baru.")
+    forge_step("[A9] Tulis klaim t-1205 dengan started_at 10 menit sebelum base (di dalam grace 15 menit)",
+               "t-1205", "owner", ["src/grace.py"],
+               fmt(base_dt - timedelta(minutes=10)), fmt(now_utc()),
+               fmt(now_utc() + timedelta(hours=2)), 101, 101,
+               note="Grace bukan hair-trigger: selisih 10 menit masih lolos.")
+    step(scn, "[A9b] claim.py check LOLOS — di dalam grace tidak di-FAIL",
+         check, main, "pass")
+
+    # --- B. Duplicate created_seq -----------------------------------
+    forge_step("[B1] Tulis klaim t-1206 dengan created_seq 77",
+               "t-1206", "teammate-1", ["src/dup_a.py"],
+               fmt(now_utc()), fmt(now_utc()), fmt(now_utc() + timedelta(hours=2)), 77, 77,
+               note="Dua file berbeda — satu-satunya yang salah di sini adalah seq-nya.")
+    forge_step("[B2] Tulis klaim t-1207 dengan created_seq 77 JUGA (race: dua agent baca max yang sama)",
+               "t-1207", "owner", ["src/dup_b.py"],
+               fmt(now_utc()), fmt(now_utc()), fmt(now_utc() + timedelta(hours=2)), 77, 78)
+    expect_fail_with("[B3] claim.py check HARUS GAGAL — created_seq ganda",
+                     check, "created_seq 77 is shared by t-1206, t-1207",
+                     "Dua klaim tidak bisa dibuat di posisi yang sama — 'siapa duluan' tidak terdefinisi.")
+    expect_fail_with("[B4] validate.py HARUS GAGAL — created_seq ganda yang sama",
+                     validate, "created_seq 77 is shared by t-1206, t-1207")
+    step(scn, "[B5] Lepas satu duplikat (t-1207) — yang tersisa hanya satu yang aktif",
+         release + ["--task", "t-1207", "--by", "owner"], main, "pass")
+    step(scn, "[B5b] claim.py check LOLOS — duplikat yang sudah released adalah sejarah mati",
+         check, main, "pass",
+         "Gate hanya FAIL kalau ada duplikat yang aktif — me-FAIL-kan sejarah tidak punya jalan keluar.")
+
+    # --- C. Entry line citation --------------------------------------
+    # greet.py ditulis DULU — C1/C2 memakai simbolnya (login-api sudah
+    # terdaftar di starter, jadi entry login akan gagal sebagai duplikat
+    # sebelum sempat menguji aturan #line).
+    file_action(scn, "[C0] Tulis src/greet.py (greet baris 1, greet2 baris 5)",
+                "src/greet.py",
+                "def greet(name):\n    return \"hi \" + name\n\n\ndef greet2(name):\n    return \"hello \" + name\n", main)
+    expect_fail_with("[C1] Register tanpa #line HARUS DITOLAK",
+                     feat_register + ["--id", "no-line-api", "--name", "No Line",
+                                      "--does", "Tanpa kutipan baris",
+                                      "--entry", "src/greet.py:greet",
+                                      "--owner", "assistant", "--files", "src/greet.py",
+                                      "--keywords", "greet", "--breaking", "false"],
+                     "must cite its definition line",
+                     "Entry code baru wajib membawa #line — tanpa itu registry tidak bisa membuktikan "
+                     "simbol ada di baris yang dikutip.")
+    expect_fail_with("[C2] Register dengan #line yang SALAH (greet di baris 1, dikutip 99) HARUS DITOLAK",
+                     feat_register + ["--id", "wrong-line-api", "--name", "Wrong Line",
+                                      "--does", "Baris salah",
+                                      "--entry", "src/greet.py:greet#99",
+                                      "--owner", "assistant", "--files", "src/greet.py",
+                                      "--keywords", "greet", "--breaking", "false"],
+                     "not at the cited line 99",
+                     "Simbol ada di file, tapi tidak di baris yang dikutip — itu tetap entry yang bohong.")
+    step(scn, "[C3b] Register greet-api dengan #line yang BENAR",
+         feat_register + ["--id", "greet-api", "--name", "Greet API", "--does", "Menyapa",
+                          "--entry", "src/greet.py:greet#1",
+                          "--owner", "assistant", "--files", "src/greet.py",
+                          "--keywords", "greet", "sapa", "--breaking", "false"],
+         main, "pass")
+    expect_fail_with("[C4] Improve entry TANPA #line HARUS DITOLAK (walau --bump major sudah benar)",
+                     feat_improve + ["--id", "greet-api", "--by", "assistant", "--bump", "major",
+                                     "--entry", "src/greet.py:greet2",
+                                     "--note", "Pindah ke greet2",
+                                     "--breaking", "false"],
+                     "must cite its definition line",
+                     "Aturan baris berlaku untuk entry yang BERUBAH juga, bukan cuma yang baru.")
+    step(scn, "[C4b] Improve entry DENGAN #line yang benar LOLOS",
+         feat_improve + ["--id", "greet-api", "--by", "assistant", "--bump", "major",
+                         "--entry", "src/greet.py:greet2#5",
+                         "--note", "Pindah ke greet2",
+                         "--breaking", "false"],
+         main, "pass",
+         "greet-api sekarang v2.0.0, entry src/greet.py:greet2#5.")
+    step(scn, "[C5] Tulis record old-api LANGSUNG ke file — entry lama tanpa #line (grandfather)",
+         ["python3", "-c",
+          "import hashlib, json\n"
+          "from datetime import date, datetime, timezone\n"
+          "data = open('src/greet.py', 'rb').read()\n"
+          "blob = hashlib.sha1(b'blob %d\\0' % len(data) + data).hexdigest()\n"
+          "today = date.today().isoformat()\n"
+          "rec = {'id': 'old-api', 'name': 'Old API', 'kind': 'code',\n"
+          " 'does': 'API lama sebelum aturan #line', 'entry': 'src/greet.py:greet',\n"
+          " 'entry_blob_sha': blob, 'files': ['src/greet.py'], 'keywords': ['greet'],\n"
+          " 'owner_id': 'assistant', 'contributors': ['assistant'],\n"
+          " 'status': 'experimental', 'version': '1.0.0', 'breaking': False,\n"
+          " 'breaking_notes': '', 'canonical': False, 'contract': False,\n"
+          " 'depends_on': [], 'used_by': [],\n"
+          " 'changes': [{'version': '1.0.0', 'by': 'assistant', 'note': 'First version', 'date': today}],\n"
+          " 'last_verified': today, 'status_reason': 'registered as experimental',\n"
+          " 'status_changed_by': 'assistant',\n"
+          " 'status_changed_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),\n"
+          " 'lamport': 1}\n"
+          "json.dump(rec, open('team/features/old-api.json', 'w'), indent=2, sort_keys=True)\n"
+          "print('wrote old-api without a line citation')"],
+         main, "pass",
+         "Entry lama tidak dipaksa mati — grandfather: check hanya warning.")
+    step(scn, "[C5b] features.py check LOLOS tapi memberi WARNING 'no line citation'",
+         ["bash", "-c", "python3 %s check team/features --roster team/roster --repo-root . | grep -q 'no line citation'"
+          % str(SCRIPTS / "features.py")],
+         main, "pass",
+         "Warning, bukan FAIL — entry lama tetap jalan sampai di-reverify.")
+    step(scn, "[C6] Reverify old-api — line ditambahkan",
+         feat_reverify + ["--id", "old-api", "--by", "assistant"], main, "pass")
+    step(scn, "[C6b] Entry old-api sekarang src/greet.py:greet#1",
+         ["python3", "-c",
+          "import json\n"
+          "c = json.load(open('team/features/old-api.json'))\n"
+          "assert c['entry'] == 'src/greet.py:greet#1', c['entry']\n"
+          "print('ASSERT OK: reverify pinned the line')"],
+         main, "pass")
+    step(scn, "[C6c] features.py check LOLOS dan warning 'no line citation' HILANG",
+         ["bash", "-c", "python3 %s check team/features --roster team/roster --repo-root . | grep -q 'no line citation' && exit 1 || exit 0"
+          % str(SCRIPTS / "features.py")],
+         main, "pass")
+    file_action(scn, "[C7] Pindah simbol: satu baris komentar di atas greet.py (greet -> baris 2, greet2 -> baris 6)",
+                "src/greet.py",
+                "# catatan: sapaan\ndef greet(name):\n    return \"hi \" + name\n\n\ndef greet2(name):\n    return \"hello \" + name\n", main)
+    expect_fail_with("[C7b] features.py check HARUS GAGAL — baris yang dikutip sudah tidak benar",
+                     feat_check, "not at the cited line",
+                     "Registry yang menunjuk ke baris salah tidak boleh hijau — dan reverify yang memperbaikinya.")
+    step(scn, "[C7c] Reverify old-api — line di-UPDATE ke baris baru",
+         feat_reverify + ["--id", "old-api", "--by", "assistant"], main, "pass")
+    step(scn, "[C7d] Entry old-api sekarang src/greet.py:greet#2",
+         ["python3", "-c",
+          "import json\n"
+          "c = json.load(open('team/features/old-api.json'))\n"
+          "assert c['entry'] == 'src/greet.py:greet#2', c['entry']\n"
+          "print('ASSERT OK: reverify updated the moved line')"],
+         main, "pass",
+         "Pindah baris via reverify BUKAN contract change — kontraknya file:function, baris hanya pointer.")
+    step(scn, "[C7e] Reverify greet-api juga — greet2 pindah ke baris 6",
+         feat_reverify + ["--id", "greet-api", "--by", "assistant"], main, "pass")
+    step(scn, "[C7f] Entry greet-api sekarang src/greet.py:greet2#6",
+         ["python3", "-c",
+          "import json\n"
+          "c = json.load(open('team/features/greet-api.json'))\n"
+          "assert c['entry'] == 'src/greet.py:greet2#6', c['entry']\n"
+          "print('ASSERT OK: reverify updated the moved line')"],
+         main, "pass")
+    step(scn, "[C7g] features.py check LOLOS — semua line (re)pinned, blob segar",
+         feat_check, main, "pass")
+    validate_end(scn, main)
+    return scn
+
+
 def main():
     WORK.mkdir(exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
-    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7(), s8(), s9(), s10(), s11()]
+    scenarios = [s1(), s2(), s3(), s4(), s5(), s6(), s7(), s8(), s9(), s10(), s11(), s12()]
     total_steps = sum(len(s["steps"]) for s in scenarios)
     gates_ok = sum(1 for s in scenarios for st in s["steps"] if st.get("gate_ok"))
     doc = {
-        "generated_by": "run_simulations.py — script ASLI TheRoster v2.6.0",
+        "generated_by": "run_simulations.py — script ASLI TheRoster v2.7.0",
         "repo": "Rifkiend/TheRoster",
         "scenarios": scenarios,
         "summary": {"scenarios": len(scenarios), "steps": total_steps,
