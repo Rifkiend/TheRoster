@@ -17,6 +17,10 @@
 npx skills add Rifkiend/TheRoster
 ```
 
+<p>
+<a href="#install">Install</a> · <a href="#the-5-steps-the-whole-skill">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="#faq">FAQ</a> · <a href="#examples">Examples</a> · <a href="#simulations">Simulations</a> · <a href="#roadmap">Roadmap</a>
+</p>
+
 </div>
 
 ---
@@ -24,7 +28,7 @@ npx skills add Rifkiend/TheRoster
 ## FAQ
 
 <details>
-<summary><strong>Apa itu TheRoster?</strong></summary>
+<summary><strong>What is TheRoster?</strong></summary>
 
 One rule: **the roster is the single source of truth about the team.** If someone is not on the list, they are not your teammate — do not invent them.
 
@@ -38,7 +42,7 @@ It works for any job, not just code: a website-build team, a software team, an o
 </details>
 
 <details>
-<summary><strong>Gimana cara install?</strong></summary>
+<summary><strong>How do I install it?</strong></summary>
 
 ```bash
 npx skills add Rifkiend/TheRoster
@@ -49,21 +53,21 @@ Or copy it into your project (`.claude/skills/`, `.agents/skills/`, `.github/ski
 </details>
 
 <details>
-<summary><strong>Apa itu Graphyfy?</strong></summary>
+<summary><strong>What is Graphyfy?</strong></summary>
 
 New in v2.8.0: `team/graph.json` maps every file — location, size (lines/tokens), imports/links, and owner from the roster — so an agent queries the map (`graph.py query --symbol/--path/--dir`) instead of reading all the files. Measured **99.0% token savings on this repo** (4,700 vs 469,622 tokens for 6 questions). It is only used above a MEASURED threshold: below it iff fewer than 5 files AND fewer than 500 lines, where reading directly is cheaper. `validate.py` FAILs on a stale graph — a lying map is worse than no map.
 
 </details>
 
 <details>
-<summary><strong>Gratis atau berbayar?</strong></summary>
+<summary><strong>Free or paid?</strong></summary>
 
 The skill is free (MIT), no server, no account. A hosted Pro server (live presence, atomic claims, and the rest) is still a plan, not a product — it gets validated with 5–10 users first; there is no final price yet.
 
 </details>
 
 <details>
-<summary><strong>Apa yang baru di v2.8.0?</strong></summary>
+<summary><strong>What's new in v2.8.0?</strong></summary>
 
 Graphyfy (the code graph `team/graph.json`, the freshness gate in `validate.py`/`doctor.py`, the measured threshold) and the new tesseract icon above. Details: [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -104,8 +108,8 @@ Since v2.3 a claim can also name its own git worktree (`--worktree`, opt-in `wor
 
 1. **Load the roster first, check your mailbox, run doctor.py** — `team/roster/`. If there is no roster, stop and make one. Do not guess the team. Then read `team/mailbox/<your-id>.jsonl` and run `python3 skills/team-roster/scripts/doctor.py`.
 2. **Plan only with people on the roster** — assign work only to `active` members whose `can_do` matches. If nobody can do it, say so. Do not invent a teammate.
-3. **Claim the work before you touch it** — `git fetch origin && git rebase origin/main`, then `python3 skills/team-roster/scripts/claim.py claim --task t-002 --title "Kerjakan checkout" --owner <your-id> --files src/checkout.py`, then commit + push the claim file **alone, first**, before any work. If the claim fails or the push is rejected, someone else is already on it — stop. An open decision gate on the task blocks the claim the same way. With `worktree_mode: "per-claim"`, claim with `--worktree <path>` and work in that worktree instead of the shared checkout — two agents can then edit the same file at once. Heartbeat every 30 minutes for claims running longer than 30 minutes; a claim dies `max_lifetime_hours` (default 24) after it starts, no matter how fresh the heartbeat is. When finished, file a receipt — `claim.py done --task t-002 --by <your-id> --outcome succeeded --summary "..."` — there is no silent done; a `failed` outcome still marks the claim done but leaves the PRD item `in_progress`. A teammate then reviews the work (`approve` or `request-changes`); the latest `request-changes` blocks the PRD done-gate until a newer `approve` clears it. For high-uncertainty work, fan out instead of working alone — `fanout.py create` runs one prompt across N member claims, `compare` scores them on a scorecard, `decide` records one winner; it costs ×N tokens, so it is opt-in only, never a default. Claims are exact file paths only (no directories, no globs); max 5 active claims per agent, max 10 files per claim.
-4. **Search before you build — and continue what exists** — `python3 skills/team-roster/scripts/features.py search login team/features`. Search reports the top-5 with deterministic ranking (stable > experimental > deprecated, then highest version, then most `used_by`, then earliest id). If a stable feature exists, use its `entry` directly (reverify first if `entry_blob_sha` differs) and record it with `features.py use --id login-api --by t-002`. If it exists but needs to grow, continue it in place: claim its files, improve the same files, and bump the version with `features.py improve --id login-api --by <your-id> --bump minor --note "Tambah login Google" --breaking false --breaking-notes ""`. New registrations default to `experimental`; promoting to `stable` needs a reviewer different from the owner. If none exists, build it, then register it with `features.py register ...` before you push.
+3. **Claim the work before you touch it** — `git fetch origin && git rebase origin/main`, then `python3 skills/team-roster/scripts/claim.py claim --task t-002 --title "Build the checkout" --owner <your-id> --files src/checkout.py`, then commit + push the claim file **alone, first**, before any work. If the claim fails or the push is rejected, someone else is already on it — stop. An open decision gate on the task blocks the claim the same way. With `worktree_mode: "per-claim"`, claim with `--worktree <path>` and work in that worktree instead of the shared checkout — two agents can then edit the same file at once. Heartbeat every 30 minutes for claims running longer than 30 minutes; a claim dies `max_lifetime_hours` (default 24) after it starts, no matter how fresh the heartbeat is. When finished, file a receipt — `claim.py done --task t-002 --by <your-id> --outcome succeeded --summary "..."` — there is no silent done; a `failed` outcome still marks the claim done but leaves the PRD item `in_progress`. A teammate then reviews the work (`approve` or `request-changes`); the latest `request-changes` blocks the PRD done-gate until a newer `approve` clears it. For high-uncertainty work, fan out instead of working alone — `fanout.py create` runs one prompt across N member claims, `compare` scores them on a scorecard, `decide` records one winner; it costs ×N tokens, so it is opt-in only, never a default. Claims are exact file paths only (no directories, no globs); max 5 active claims per agent, max 10 files per claim.
+4. **Search before you build — and continue what exists** — `python3 skills/team-roster/scripts/features.py search login team/features`. Search reports the top-5 with deterministic ranking (stable > experimental > deprecated, then highest version, then most `used_by`, then earliest id). If a stable feature exists, use its `entry` directly (reverify first if `entry_blob_sha` differs) and record it with `features.py use --id login-api --by t-002`. If it exists but needs to grow, continue it in place: claim its files, improve the same files, and bump the version with `features.py improve --id login-api --by <your-id> --bump minor --note "Add Google login" --breaking false --breaking-notes ""`. New registrations default to `experimental`; promoting to `stable` needs a reviewer different from the owner. If none exists, build it, then register it with `features.py register ...` before you push.
 5. **Sync before you push** — `git fetch origin`, rebase, then run `sync_check.py team/features team/claims`, `check_roster.py team/roster`, `claim.py check team/claims`, `features.py check team/features`, `validate.py team` — then `git push --atomic` immediately. An open decision gate on the work also fails validation at push time — resolve it, or get a human waiver, before pushing. If the push is rejected, start again from fetch. If two pushes happen at once, GitHub accepts the first and rejects the second — the rejected pusher fetches and reconciles, never `--force push`. Then merge via PR, never straight to `main`.
 
 ## Install
@@ -216,6 +220,17 @@ Honest limits, stated plainly. v2 narrows every one of these; none of them is cl
 - **Merge queue** — the pre-push sequence narrows the fetch → check → push window to seconds, but only a server-side check at landing time closes it. Branch freshness limits how stale a branch may get; it does not re-validate at merge.
 - **Embedding semantic search** — search is deterministic keyword ranking (top-5 with scores), not understanding. True semantic search needs an embedding model + vector store + re-index pipeline.
 - **Cryptographic identity registry** — there is no way, file-only, to prove an id really is that agent. Roster changes need human approval via PR + CODEOWNERS; that is the file-only version of the fix.
+
+## Roadmap
+
+What comes next — and what stays file-only. Nothing here is promised on a date; the order is decided by validation, not by a calendar.
+
+- **Bridge v0.1 (building now)** — the live watcher app: a small program on each machine that answers what is happening *right now* (is the tree dirty, is the agent alive, what time is it on that machine). v0.1 answers 4 questions over loopback only, no tunnel, no server. v0.2 adds a tunnel + per-agent token; v1.0 is the Pro server below.
+- **TheRoster Pro (hosted server, planned)** — live presence, atomic claims, wake sleeping agents, auto-merge, a cross-repo board, an email bridge for closed-platform agents, and an owner dashboard. It gets validated with 5–10 real users first — before anything is built. The skill stays free (MIT) forever; there is no final Pro price yet.
+- **Graphyfy v0.2 (planned)** — compact records (the owner query that only saved 43.3% in v0.1), watch mode, a semantic-conflict warning at claim time, and the graph as a truth-checker for registered features.
+- **A2A export + connected accounts (proposed, not decided)** — export roster records to signed A2A Agent Cards, and a `connected_accounts` field so an agent's name can carry the accounts it is verified on.
+
+The skill itself never needs a server. Everything on this list that needs one lives in Pro — and Pro only gets built after real users say they want it.
 
 ## What's in here
 
