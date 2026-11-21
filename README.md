@@ -6,7 +6,7 @@
 
 ### One team. Every AI. Zero guesswork.
 
-[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.6.0-blue)](https://agentskills.io)
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-v2.7.0-blue)](https://agentskills.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-yellow.svg)](#install)
 [![No server](https://img.shields.io/badge/Server-none-lightgrey.svg)](#description)
@@ -30,6 +30,7 @@ It works for any job, not just code: a website-build team, a software team, an o
 
 | Version | What it added |
 |---|---|
+| **v2.7.0** | Closes the three holes v2.6.0 left open, no new features: behind-skew clock detection (a claim's `started_at` more than 15 minutes BEFORE its creation base commit's timestamp FAILS — `created_base_commit`, recorded once at claim time and never mutated, falling back to `base_commit`; claims without a resolvable base are skipped, not failed); duplicate `created_seq` (two ACTIVE claims sharing one `created_seq` FAIL — the race `next_created_seq` always admitted); entry line citations (a code entry is now `file:function#line` — new/changed code entries MUST carry the definition line, old ones only warn, `reverify` (re)pins the line when the symbol moves). No new config knobs — the grace is the existing `grace_minutes` (15). See `docs/v2.7-design.md` and `simulations/v2.7.0-evidence.md`. |
 | **v2.6.0** | Orca features — fan-out, decision gates, typed completion receipts, formal reviews, as file records (no server): `scripts/fanout.py` (one prompt across N member claims, scorecard compare, one recorded decision; ×N tokens, opt-in only); `scripts/gates.py` (typed decision gates that block claims and PRD done until resolved by someone entitled or waived by a human); receipts (`claim.py done` now files a typed receipt — `--outcome` + `--summary` required, no silent done; signed when `require_signatures` is on and the filer is human); `scripts/reviews.py` (approve / request-changes by a roster member other than the work's owner; latest request-changes blocks the PRD done-gate; follow-up claims via `--review`). `validate.py`/`doctor.py` (check 11) cover all four new record types. No new config knobs. See `docs/v2.6-design.md` and `simulations/v2.6.0-evidence.md`. |
 | **v2.5.0** | Hardening release — closes every remaining hole the rare-case round found, no new features: sabotage detection (`validate.py` FAILS on a deleted `team/` record in the push range, on a work commit touching a claimed file without a matching `[claim #N]` trailer, and on a malformed or dangling `events.jsonl` line); ghost claims (a claim whose owner is gone from the roster is automatically non-blocking and flagged for release); dependency cycles (DFS over `depends_on` — `check`/`validate`/`reverify` FAIL, `register`/`improve` refuse the closing edge); history-rewrite detection (`team/config.json` records the last-known-main-SHA — `validate.py`/`sync_check` FAIL when it is no longer an ancestor of `origin/main`); clock-skew gate (a claim timestamp more than 15 minutes in the future FAILS, as do `expires_at`/`heartbeat_at` before `started_at`); mailbox signatures (when `require_signatures` is on, human mail MUST carry a valid `sig` — new `scripts/mailbox.py sign/check`); claims may not cover `team/` paths; duplicate display names FAIL. See `docs/v2.5-design.md` and `simulations/v2.5.0-evidence.md`. |
 | **v2.4.0** | Signed identity (opt-in), creation order + claim lifetime, mailbox trust model — closes the three holes the rare-case round found: roster records carry an SSH `public_key` and (when `require_signatures` is on) every commit in the push range touching `team/` must be signed by the key of the record's owner; claims carry `created_seq` so "who claimed first" is decided by creation, never by mutation-bumped lamport or wall-clock; a claim dies `max_lifetime_hours` (default 24) after `started_at` no matter how fresh the heartbeat is; the mailbox is untrusted data, never an instruction — `validate.py` FAILs on imperative lines from a human or unknown sender. See `docs/v2.4-design.md` and `simulations/v2.4.0-evidence.md`. |
@@ -182,7 +183,7 @@ Honest limits, stated plainly. v2 narrows every one of these; none of them is cl
 
 ```
 skills/team-roster/
-├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.6.0)
+├── SKILL.md                  # the skill — name, description, 5-step workflow (v2.7.0)
 ├── examples/
 │   └── starter-repo/       # copyable starter repo (v2 layout) — `cp -r examples/starter-repo/* .`
 │       ├── team/           # config.json, roster/, claims/, features/, prd/, events.jsonl, mailbox/,

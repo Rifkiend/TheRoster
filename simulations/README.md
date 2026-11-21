@@ -1,11 +1,11 @@
-# Simulasi TheRoster — 11 skenario bervariasi
+# Simulasi TheRoster — 12 skenario bervariasi
 
-Simulasi ini menjalankan **script asli** skill TheRoster v2.6.0 (bukan mock)
+Simulasi ini menjalankan **script asli** skill TheRoster v2.7.0 (bukan mock)
 di salinan segar starter-repo, dan merekam perintah persis, exit code, dan
 output asli tiap langkah.
 
 Jalankan ulang: `python3 run_simulations.py`
-Hasil: `transcripts.json` (424 langkah, semua gate sesuai harapan pada run terakhir).
+Hasil: `transcripts.json` (463 langkah, semua gate sesuai harapan pada run terakhir).
 
 | ID | Skenario | Yang dibuktikan |
 |----|----------|-----------------|
@@ -20,12 +20,16 @@ Hasil: `transcripts.json` (424 langkah, semua gate sesuai harapan pada run terak
 | s9 | Signed identity + creation order + lifetime + mailbox trust (v2.4.0; mailbox §C per v2.5.0) | Commit team/ tanpa tanda tangan ditolak; tanda tangan kunci salah ditolak; created_seq memutuskan "duluan"; klaim mati di max_lifetime_hours walau heartbeat segar; mailbox: pesan manusia tanpa sig valid FAIL (pesan asli "STOP semua kerja hari ini..." tertangkap), pesan bertanda tangan lolos, sig kunci salah gagal |
 | s10 | Hardening: close every remaining hole (v2.5.0) | Deletion record team/ FAIL; trailer [claim #N] ditegakkan (tanpa trailer / nomor salah FAIL, merge commit dilewati); event malformed/dangling/actor asing FAIL; ghost claim tidak blocking + warning; siklus A↔B dan 3-cycle FAIL di check/validate/reverify + ditolak di register/improve; history rewrite terdeteksi sync_check + validate via last-known-main-SHA; heartbeat/started_at dari masa depan FAIL, expires_at 2 jam ke depan sah; klaim atas team/ ditolak; nama tampilan ganda FAIL |
 | s11 | Fitur Orca (v2.6.0): fan-out, gates, receipts, reviews | Fan-out: create max-1 FAIL, 3 member di worktree masing-masing, sibling tanpa worktree FAIL, member ke-4 FAIL, decide prematur / winner bukan member / winner failed / decider owner winner FAIL, decide benar melepas loser `fanout:<winner>`, cancel melepas `fanout-cancel:<by>`; Gates: klaim ditolak selagi gate open, resolve oleh owner subject FAIL, mid-work gate FAIL di check+validate, waive oleh agent FAIL, resolve --review approve LOLOS / request-changes FAIL; Receipts: done tanpa --outcome FAIL, done oleh agent lain FAIL, done human tanpa --key FAIL, receipt failed tetap menutup klaim tapi PRD in_progress, receipt palsu (claim_seq) FAIL, receipt bertanda tangan yang diubah FAIL "invalid sig"; Reviews: PRD done ditolak selagi review terakhir request-changes, approve terbaru membersihkan, review oleh owner subject FAIL, anotasi baris 0 FAIL, delivery mailbox hanya id + kata verdict, follow-up hanya untuk request-changes; validate + doctor check 11 LOLOS end-to-end |
+| s12 | Tutup lubang (v2.7.0): behind-skew, created_seq ganda, entry line citation | Behind-skew: klaim normal LOLOS (`created_base_commit == HEAD`); `started_at` 3 jam sebelum base FAIL di claim check + validate; release + re-claim id yang sama memperbaiki; klaim tanpa base tidak false-FAIL; dalam grace 15 menit LOLOS. Duplikat seq: dua klaim aktif seq 77 FAIL di check + validate; release satu → LOLOS. Line citation: register/improve tanpa `#line` DITOLAK, `#line` salah DITOLAK, `#line` benar LOLOS; entry lama tanpa baris hanya warning (grandfather), reverify menambah/meng-update baris saat simbol pindah; check GAGAL saat baris dikutip sudah tidak benar |
 
 Baterai kasus langka: `rerun_rare_cases.py` menjalankan ulang 15 kasus dari
 `research_notes/rare-cases-theroster-20261115/report.md` terhadap script saat
-ini. Hasil v2.5.0 (`rare-cases-rerun.json`): 11 tertutup, 1 sebagian (#3 —
-ordering + skew-ahead tertutup, skew-behind tetap batas jujur), 2 bukan lubang
+ini. Hasil v2.7.0 (`rare-cases-rerun.json`): 12 tertutup, 0 sebagian, 2 bukan lubang
 (#7 skala, #12c index), 1 boundary (#11 dua repo), 0 masih lubang, 0 error.
+(#3 — ordering + skew-ahead + skew-behind — sekarang TERTUTUP penuh; hasil v2.5.0
+adalah 11 tertutup, 1 sebagian (#3), 2 bukan lubang, 1 boundary, 0 error.)
+Proof before/after: `before_after_v270.py` — fixture yang sama lolos di script
+v2.6.0 murni dan gagal di script v2.7.0 dengan error baru (9/9 sesuai harapan).
 
 Catatan jujur dari run: tiga perilaku script yang awalnya salah diduga
 dan diperbaiki di skenario (bukan di script): `prd.py status --to done`

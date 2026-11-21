@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.9+ for scripts/check_roster.py, scripts/claim.py, scripts/features.py, scripts/sync_check.py, scripts/validate.py, scripts/archive_events.py, scripts/prd.py, scripts/mailbox.py, scripts/fanout.py, scripts/gates.py, scripts/receipts.py, scripts/reviews.py, and scripts/doctor.py; git for the pre-push hook and for syncing team state (git >= 2.38 for the v2.3 worktree merge check). Works in Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, and any agent that reads the Agent Skills open standard (agentskills.io).
 metadata:
   author: Rian (@rikan_7843)
-  version: 2.6.0
+  version: 2.7.0
   tags: team, roster, collaboration, multi-agent, pre-push, conflict-prevention, feature-registry, reuse, continue-in-place, sync-check, worktree
 ---
 
@@ -23,6 +23,8 @@ metadata:
 > **v2.5.0** closes every remaining hole the rare-case round found, and adds no features: **sabotage detection** (`validate.py` FAILS on a deleted `team/` record in the push range, on a work commit touching a claimed file without a matching `[claim #N]` trailer, and on a malformed or dangling `events.jsonl` line); **ghost claims** (a claim whose owner is gone from the roster is automatically non-blocking and flagged for release); **dependency cycles** (DFS over `depends_on` — `features.py check` / `validate.py` / `reverify` FAIL, `register`/`improve` refuse the edge that would close the loop); **history-rewrite detection** (`team/config.json` records the last-known-main-SHA — `validate.py`/`sync_check` FAIL when it is no longer an ancestor of `origin/main`); **clock-skew gate** (a claim timestamp more than 15 minutes in the future FAILS, as do `expires_at` / `heartbeat_at` before `started_at`); **mailbox signatures** (when `require_signatures` is on, a line claiming a human sender MUST carry a valid `sig` — see "Mailbox trust model" below); **claims may not cover `team/` paths**; and **duplicate display names FAIL**. See "Hardening (v2.5)" below. Full design: `docs/v2.5-design.md`.
 
 > **v2.6.0** adds the Orca patterns (one prompt across N agents, decision gates, typed completion receipts, formal reviews) as file records, not as a server: **fan-out** (`team/fanout/` — an explicit, opt-in runbook: one prompt, N member claims each on its own branch/worktree, a scorecard to compare them, one recorded decision; costs ×N tokens, so never a default); **decision gates** (`team/gates/` — a gate must be resolved or waived by someone entitled before the work it blocks may proceed; enforced at claim time and at push time); **typed completion receipts** (`team/receipts/` — `claim.py done` now files a receipt: `--outcome succeeded|failed` + `--summary` are required, no silent done; a receipt is a claim of completion, not proof of it); **formal reviews** (`team/reviews/` — a roster member other than the work's owner records `approve` or `request-changes`; the latest `request-changes` blocks the PRD done-gate until a newer `approve` clears it). No new config knobs — fan-out, gates, and reviews are opt-in by use; receipts apply to every team. See "Orca features (v2.6)" below. Full design: `docs/v2.6-design.md`.
+
+> **v2.7.0** closes the three holes v2.6.0 left open, and adds no features: **behind-skew clock detection** (a claim's `started_at` more than 15 minutes BEFORE its creation base commit's timestamp FAILS — a claim cannot be created before the commit it is based on exists; the base is `created_base_commit`, recorded once at claim time and never mutated, falling back to `base_commit`; claims without a resolvable base are skipped, not failed); **duplicate `created_seq`** (two ACTIVE claims sharing one `created_seq` FAIL — the race `next_created_seq` always admitted; a single active holder plus released/done ones is fine); **entry line citations** (a code entry is now `file:function#line` — the definition line; new/changed code entries MUST carry it, old ones only warn, and `reverify` (re)pins the line when the symbol moves). No new config knobs — the grace is the existing `grace_minutes` (15). Full design: `docs/v2.7-design.md`.
 
 ## The idea in one sentence
 
@@ -128,7 +130,7 @@ python3 skills/team-roster/scripts/features.py search auth team/features
 ```
 
 - Search reports the **top-5 with scores**, never just the first hit. Ranking is deterministic: `stable` > `experimental` > `deprecated`, then highest version, then most `used_by`, then earliest `id`. On a tie, stop and ask a human (or record the ambiguity in the PR) — do not pick at random. Exactly one feature per keyword-set is `canonical`.
-- If a `stable` match exists: USE IT. Call its `entry` (`file:function`). First check `entry_blob_sha` against the current file — if it differs, the entry is *suspect* and must be re-verified (`features.py reverify --id login-api`) before reuse. Then record that you use it: `python3 skills/team-roster/scripts/features.py use --id login-api --by <your-task-id>`.
+- If a `stable` match exists: USE IT. Call its `entry` (`file:function#line`). First check `entry_blob_sha` against the current file — if it differs, the entry is *suspect* and must be re-verified (`features.py reverify --id login-api`) before reuse. Then record that you use it: `python3 skills/team-roster/scripts/features.py use --id login-api --by <your-task-id>`.
 - If it exists but needs to grow: **CONTINUE IT IN PLACE — do not fork it.** Steps:
   1. Claim its files first (step 3) — `claim.py claim` on the feature's `files`. Reserve the feature id at claim time if you are registering a new one (`reserves_feature` in the claim).
   2. Improve the same files, keep the same `id` and the same `entry` if old callers must keep working.
@@ -145,7 +147,7 @@ python3 skills/team-roster/scripts/features.py search auth team/features
   python3 skills/team-roster/scripts/features.py register --id checkout-api --name "Checkout API" --does "Create a checkout order and return its payment link" --entry src/checkout.py:create_order --files src/checkout.py tests/test_checkout.py --owner <your-roster-id> --keywords checkout order payment --breaking false --breaking-notes ""
   git add team/features/checkout-api.json && git commit -m "register: checkout-api" && git push
   ```
-  New registrations default to `experimental`. Promoting `experimental → stable` requires a `--reviewer` different from the owner, and a human-approved PR. Status transitions allowed: `experimental → stable`, `stable → deprecated`, `experimental → deprecated`, `experimental → cancelled`, `stable → cancelled`. **`deprecated → stable` is FORBIDDEN without a human-approved PR.** Every transition needs `status_reason` + `status_changed_by` + `status_changed_at` in the same commit.
+  New registrations default to `experimental`. A new or changed code entry must cite its definition line (`file:function#line`, e.g. `src/auth/login.py:login#14`) — `register`/`improve` refuse one without it; `reverify` (re)pins the line when the symbol moves (a moved line is not a contract change — the contract is `file:function`). Old entries without a line still pass, with a warning. Promoting `experimental → stable` requires a `--reviewer` different from the owner, and a human-approved PR. Status transitions allowed: `experimental → stable`, `stable → deprecated`, `experimental → deprecated`, `experimental → cancelled`, `stable → cancelled`. **`deprecated → stable` is FORBIDDEN without a human-approved PR.** Every transition needs `status_reason` + `status_changed_by` + `status_changed_at` in the same commit.
   A feature that is not registered will be rebuilt by the next AI — and that rebuild will not be their fault, because they could not find yours.
 
 For non-code features (`kind: doc|design|process`), `entry` is a pointer (doc URL / repo path to the artefact), not `file:function`, and `entry_blob_sha` does not apply.
@@ -221,7 +223,7 @@ python3 skills/team-roster/scripts/features.py cancel --id old-login --by <your-
 A function or database schema shared between two developers is an interface — a contract. Mark it so:
 
 ```bash
-python3 skills/team-roster/scripts/features.py register --id login-api --name "Login API" --does "..." --entry src/auth/login.py:login --files src/auth/login.py --owner <you> --keywords login auth --contract --depends-on session-store@1.2.0 --breaking false --breaking-notes ""
+python3 skills/team-roster/scripts/features.py register --id login-api --name "Login API" --does "..." --entry src/auth/login.py:login#14 --files src/auth/login.py --owner <you> --keywords login auth --contract --depends-on session-store@1.2.0 --breaking false --breaking-notes ""
 ```
 
 - `--contract` marks the feature a shared interface. Its entry file should carry a `# roster-contract: <id>` comment (any language's comment syntax), so a reader of the code finds the registry entry. `features.py check` warns when the marker is missing — warn-only, the flag itself is the control.
@@ -418,11 +420,16 @@ adds no features. Full design: `docs/v2.5-design.md`.
   the future vs the local clock FAILS, as do `expires_at` /
   `heartbeat_at` before `started_at`. `expires_at` is not futureness-gated — it is a
   promise about the future (now + TTL), so a fresh claim legitimately expires hours
-  ahead. A clock running *behind*
-  cannot be detected from the record alone (its timestamps look
-  exactly like genuinely old ones) — that stays an honest limit;
-  the pre-push hook's >5-minute clock warning is the mitigation
-  for the machine that has the skewed clock.
+  ahead. Since v2.7 the *behind* direction is detected too: `started_at` more than 15
+  minutes BEFORE the claim's creation base commit (`created_base_commit`, falling back
+  to `base_commit`) FAILS — a claim cannot be created before the commit it is based
+  on exists. The gate is status-blind like the future gate; a skewed claim is fixed
+  by release + re-claim under the same task id (a fresh record overwrites it). Claims
+  without a resolvable base (pre-v2.7, non-git repos) are skipped, not failed; a base
+  author with a fast clock, or a rebase that rewrites the base commit, can false-FAIL
+  transiently — release + re-claim once time has passed the base timestamp. The
+  pre-push hook's >5-minute clock warning remains the mitigation for the machine that
+  has the skewed clock.
 - **Claims may not cover `team/` paths.** `claim.py` rejects them
   at claim time; `claim.py check` and `validate.py` FAIL one
   already in the files. The board cannot be claimed.
@@ -668,7 +675,7 @@ The team's rules as data, so the hook and CI enforce the same numbers:
 {
   "canonical_remote": "origin",
   "canonical_branch": "main",
-  "skill_version": "2.6.0",
+  "skill_version": "2.7.0",
   "claim_ttl_minutes": 120,
   "heartbeat_minutes": 30,
   "grace_minutes": 15,
@@ -733,7 +740,7 @@ The hook refuses to run if the current branch's upstream is a fork or a differen
 - `scripts/prd.py` — create / list / status / check PRD items. Run it before claiming work that comes from a PRD. Since v2.6, `status --to done` is blocked by an open decision gate on the item (or its features) and by a latest `request-changes` review on the item, its features, or its claims.
 - `scripts/sync_check.py` — fetch the remote and compare feature versions, cancelled features, and active claims before you push. Runs as part of the hook. In worktree mode it checks the merge instead (`--claim <task-id>` for one claim).
 - `scripts/worktree_setup.sh` — create a worktree for a worktree claim + apply the shared-paths convention (v2.3). Run from the main checkout.
-- `scripts/validate.py` — cross-file schema validation for the whole `team/` tree, including PRD items, dependencies, and worktree claim consistency (v2.3); since v2.5 also the deletion/trailer/history/event gates, the ghost-claim and clock-skew rules, and the mailbox-signature gate; since v2.6 also fan-out groups, decision gates, completion receipts, and formal reviews (the per-script `check` is the single source of the rules; `validate.py` calls it and adds the gate-binding + review done-gate cross-checks).
+- `scripts/validate.py` — cross-file schema validation for the whole `team/` tree, including PRD items, dependencies, and worktree claim consistency (v2.3); since v2.5 also the deletion/trailer/history/event gates, the ghost-claim and clock-skew rules, and the mailbox-signature gate; since v2.6 also fan-out groups, decision gates, completion receipts, and formal reviews; since v2.7 also the behind-skew gate, the duplicate-`created_seq` gate, and the entry line-citation rules (the per-script `check` is the single source of the rules; `validate.py` calls it and adds the gate-binding + review done-gate cross-checks).
 - `scripts/mailbox.py` — sign a mailbox line (`sign --from <you> --to <teammate> --message "..." --key <private-key>`) and check a mailbox like `validate.py` does (`check`). v2.5.
 - `scripts/fanout.py` — create / add / compare / decide / cancel / list / check fan-out groups (`team/fanout/`). v2.6.
 - `scripts/gates.py` — create / list / resolve / waive / check decision gates (`team/gates/`). v2.6.

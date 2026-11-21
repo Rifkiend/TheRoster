@@ -374,6 +374,13 @@ def main():
         if _started is not None and _heartbeat is not None and _heartbeat < _started:
             errors.append(f"{label}: heartbeat_at {c['heartbeat_at']} is before started_at {c['started_at']} — "
                           "impossible; a heartbeat cannot predate the claim")
+        # Behind-skew gate (v2.7): same check as claim.py cmd_check —
+        # validate.py duplicates the claim checks inline, so the gate
+        # lives here too (see team_common.check_claim_base_skew).
+        _skew_err = tc.check_claim_base_skew(
+            c, root, grace_minutes=cfg.get("grace_minutes", tc.CLOCK_SKEW_FAIL_MINUTES))
+        if _skew_err:
+            errors.append(f"{label}: {_skew_err}")
         if not isinstance(c.get("lamport"), int) or c.get("lamport", 0) < 1:
             errors.append(f"{label}: lamport must be an int >= 1")
         scope = c.get("scope") or {}
@@ -434,6 +441,16 @@ def main():
         errors.append(f"CONFLICT: file {first[2]} claimed by both {first[0]} and {', '.join(losers)} — "
                       f"first by (created_seq, owner) is {first[0]} (created_seq {first[1].get('created_seq') or first[1].get('lamport')}), "
                       f"so {', '.join(losers)} must yield")
+    # Duplicate created_seq (v2.7): same gate as claim.py cmd_check —
+    # two claims sharing one seq leave "who was first" undefined.
+    # FAIL only when at least TWO duplicates are active.
+    for _seq, _tids in tc.find_duplicate_created_seq(claims):
+        _active_dups = sorted(t for t in _tids
+                              if (claims.get(t) or {}).get("status") == "active")
+        if len(_active_dups) >= 2:
+            errors.append(f"CONFLICT: created_seq {_seq} is shared by {', '.join(sorted(_tids))} — "
+                          "two claims cannot be created at the same position; release one active "
+                          f"duplicate ({', '.join(_active_dups)}) and re-claim it (re-claim recomputes max+1)")
     blocking_claims = [(t, c) for t, c in claims.items()
                        if tc.is_blocking(c, cfg=cfg, roster_ids=all_ids)]
     for i in range(len(blocking_claims)):

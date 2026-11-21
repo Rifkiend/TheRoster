@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Re-run the 15 rare / mind-blowing cases from
 research_notes/rare-cases-theroster-20261115/report.md against the
-CURRENT scripts (v2.5.0) on fresh starter-repo fixtures in /tmp.
+CURRENT scripts (v2.7.0) on fresh starter-repo fixtures in /tmp.
 
 Each case reproduces the original's exact setup and asserts the
-v2.5.0 outcome — CLOSED where v2.5.0 fixes it, STILL HOLE where the
+v2.7.0 outcome — CLOSED where v2.7.0 fixes it, STILL HOLE where the
 fix is queued (ranked-below), UNCHANGED where the original verdict
 was already "not a hole" or "boundary". A failed assertion means the
 rerun itself is wrong OR the expected outcome did not hold — either
@@ -149,7 +149,7 @@ def case(cid, title, v23, fn):
         print("   -", n)
     print(f"   => {cid}: {verdict}")
     results.append({"id": cid, "title": title, "v2.3.0": v23,
-                    "v2.5.0": verdict, "notes": notes})
+                    "v2.7.0": verdict, "notes": notes})
     return verdict
 
 
@@ -254,12 +254,15 @@ def c2():
     git(["reset", "-q", "--hard", "origin/main"], repo)
     # 2c: fake feature with a FALSE description (entry symbol exists).
     # NOTE: the starter already registers src/auth/login.py:login, so
-    # the fake uses a fresh entry file of its own.
+    # the fake uses a fresh entry file of its own. v2.7: the entry now
+    # also carries its definition line (#1) — the LOCATION is true,
+    # the DESCRIPTION is still false, and that half is still
+    # human-review (the line citation verifies where, not what).
     (Path(repo) / "src" / "auth" / "session.py").write_text(
         "def login(email, password):\n    return 'fake-token'\n")
     rc, out = py("features.py", ["register", "--id", "fake-auth", "--name", "Auth super aman",
                                  "--does", "Login dengan enkripsi militer, tidak bisa diretas",
-                                 "--entry", "src/auth/session.py:login", "--files", "src/auth/session.py",
+                                 "--entry", "src/auth/session.py:login#1", "--files", "src/auth/session.py",
                                  "--owner", "assistant", "--keywords", "auth", "login",
                                  "--breaking", "false"], repo)
     assert rc == 0, out
@@ -268,7 +271,7 @@ def c2():
     signed_commit(repo, keys["assistant"][0], "sabotage: fake feature")
     rc, out = py("validate.py", ["team"], repo)
     assert rc == 0, out
-    notes.append("fake feature with a FALSE description still registers and passes validate — entry verification checks the symbol exists, never the truth (human-review job)")
+    notes.append("fake feature with a FALSE description still registers and passes validate — the v2.7 line citation proves the symbol really is at src/auth/session.py:login#1, but the description ('enkripsi militer, tidak bisa diretas') is never checked — location truth is not description truth (human-review job)")
     # 2d: forged event line — well-formed, references a real record.
     with open(Path(repo) / "team" / "events.jsonl", "a") as fh:
         fh.write('{"actor":"owner","at":"2026-11-15T09:00:00Z","event":"claim_released","lamport":999,"task_id":"t-001"}\n')
@@ -289,23 +292,41 @@ def c3():
     notes = []
     repo = fresh_repo("c3-clock", remote=False)
     claim = claim_cmd(repo)
-    # Skew BEHIND: victim's live claim looks dead on a correct clock.
+    # Skew BEHIND (v2.7): the old model only shifted expires_at and
+    # heartbeat_at — but a real behind-clock claim has started_at
+    # shifted too (cmd_claim writes all three from the agent's own
+    # clock). Shift all three: the claim now looks exactly like a
+    # behind-clock agent's record, and the base-commit gate must catch it.
     rc, out = sh(claim + ["--task", "t-skew", "--title", "Kerja skew",
                           "--owner", "assistant", "--files", "src/auth/login.py"], repo)
     assert rc == 0, out
     p = Path(repo) / "team" / "claims" / "t-skew.json"
     c = json.loads(p.read_text())
+    c["started_at"] = fmt(now_utc() - timedelta(hours=3))
     c["expires_at"] = fmt(now_utc() - timedelta(hours=1))
     c["heartbeat_at"] = fmt(now_utc() - timedelta(hours=3))
     p.write_text(json.dumps(c, indent=2, sort_keys=True))
+    rc, out = py("claim.py", ["check", "team/claims", "--roster", "team/roster"], repo)
+    assert rc != 0 and "minutes BEFORE its creation base" in out, out
+    notes.append("skew BEHIND: a claim whose started_at is 3h before its creation base FAILS claim check "
+                 "('started_at ... is more than 15 minutes BEFORE its creation base') — a claim cannot be "
+                 "created before the commit it is based on exists, so the behind clock is now DETECTED, not silent")
+    # The take-over still works: the claim IS expired+stale by
+    # wall-clock, so a second agent may take the file. What changed
+    # is that the skew is now visible (the check above fails) instead
+    # of silently looking like an ordinary expiry.
     rc, out = sh(claim + ["--task", "t-skew2", "--title", "Ambil alih",
                           "--owner", "teammate-1", "--files", "src/auth/login.py"], repo)
     assert rc == 0, out
-    notes.append("skew BEHIND: a claim whose clock runs 3h behind looks expired+stale on a correct clock, and a second agent takes the file (exit 0) — stealability still follows wall-clock both directions")
+    notes.append("skew BEHIND: the expired+stale claim can still be taken over (exit 0) — stealability still "
+                 "follows wall-clock both directions; the gate makes the CAUSE visible, it does not forbid the take-over")
     # Skew AHEAD: the +3h claim must now FAIL the clock-skew gate.
+    # Restore t-skew's started_at first so the ahead assertion is
+    # clean (only the future error fires, not the behind one).
     for tid, hrs in (("t-skew", 0), ("t-skew2", 3)):
         p = Path(repo) / "team" / "claims" / (tid + ".json")
         c = json.loads(p.read_text())
+        c["started_at"] = fmt(now_utc())
         c["heartbeat_at"] = fmt(now_utc() + timedelta(hours=hrs))
         c["expires_at"] = fmt(now_utc() + timedelta(hours=2 + hrs))
         p.write_text(json.dumps(c, indent=2, sort_keys=True))
@@ -336,8 +357,9 @@ def c3():
     rc, out = py("claim.py", ["check", "team/claims", "--roster", "team/roster"], repo)
     assert rc != 0 and "first by (created_seq, owner) is t-early" in out, out
     notes.append("ordering: t-early (teammate-1, created first) beats t-late (assistant, created an hour later) — claim check now names the first CREATOR, not the alphabetically-first owner")
-    return ("PARTIAL — ordering CLOSED by created_seq; skew-AHEAD now FAILS the clock-skew gate; "
-            "skew-BEHIND still UNCHANGED (no signal in the record — a behind clock looks exactly like a genuinely expired claim; honest limit)", notes)
+    return ("CLOSED — ordering CLOSED by created_seq; skew-AHEAD FAILS the clock-skew gate; "
+            "skew-BEHIND now DETECTED by the base-commit comparison (started_at 3h before the creation base "
+            "fails the check; the expired+stale take-over still works, but the cause is visible)", notes)
 
 
 # ---------------------------------------------------------------- case 4
@@ -425,11 +447,11 @@ def c6():
     (Path(repo) / "src" / "feat_b.py").write_text("def beta():\n    return 'b'\n")
     reg = ["python3", str(SCRIPTS / "features.py"), "register"]
     rc, out = sh(reg + ["--id", "feat-b", "--name", "Feat B", "--does", "Does B",
-                        "--entry", "src/feat_b.py:beta", "--files", "src/feat_b.py",
+                        "--entry", "src/feat_b.py:beta#1", "--files", "src/feat_b.py",
                         "--owner", "assistant", "--keywords", "b", "--breaking", "false"], repo)
     assert rc == 0, out
     rc, out = sh(reg + ["--id", "feat-a", "--name", "Feat A", "--does", "Does A",
-                        "--entry", "src/feat_a.py:alpha", "--files", "src/feat_a.py",
+                        "--entry", "src/feat_a.py:alpha#1", "--files", "src/feat_a.py",
                         "--owner", "assistant", "--keywords", "a", "--breaking", "false",
                         "--depends-on", "feat-b@1.0.0"], repo)
     assert rc == 0, out
@@ -491,7 +513,7 @@ def c7():
     for i in range(50):
         (Path(repo) / "src" / ("f%03d.py" % i)).write_text("def fn%d():\n    return %d\n" % (i, i))
         rc, out = py("features.py", ["register", "--id", "feat-%03d" % i, "--name", "Feat %d" % i,
-                                     "--does", "Does %d" % i, "--entry", "src/f%03d.py:fn%d" % (i, i),
+                                     "--does", "Does %d" % i, "--entry", "src/f%03d.py:fn%d#1" % (i, i),
                                      "--files", "src/f%03d.py" % i, "--owner", "assistant",
                                      "--keywords", "scale", "--breaking", "false"], repo)
         assert rc == 0, out
@@ -842,18 +864,22 @@ def c12b():
                           "--owner", "teammate-1", "--files", "src/auth/login.py"], repo)
     assert rc == 0, out
     early = json.loads((Path(repo) / "team" / "claims" / "t-early.json").read_text())
-    early["started_at"] = "2026-11-15T08:35:00Z"
+    # v2.7: started_at must stay within the 15-min grace of the creation
+    # base (the starter commit, seconds old) — the old fixed dates
+    # (2026-11-15) made the record look behind-skewed. The case only
+    # needs early < late, so relative offsets carry the same meaning.
+    early["started_at"] = fmt(now_utc() - timedelta(minutes=10))
     (Path(repo) / "team" / "claims" / "t-early.json").write_text(
         json.dumps(early, indent=2, sort_keys=True))
     late = dict(early)
     late.update({"task_id": "t-late", "task": "Belakangan sejam", "owner_id": "rean",
-                 "started_at": "2026-11-15T09:35:00Z", "lamport": 1,
+                 "started_at": fmt(now_utc() - timedelta(minutes=5)), "lamport": 1,
                  "created_seq": early["created_seq"] + 1, "claim_seq": 3})
     (Path(repo) / "team" / "claims" / "t-late.json").write_text(
         json.dumps(late, indent=2, sort_keys=True))
     rc, out = py("claim.py", ["check", "team/claims", "--roster", "team/roster"], repo)
     assert rc != 0 and "first by (created_seq, owner) is t-early" in out, out
-    notes.append("t-early (teammate-1, started 08:35) beats t-late (rean, started 09:35) — v2.3.0 said t-late was first (lamport 1, alphabet)")
+    notes.append("t-early (teammate-1, started 10 min ago) beats t-late (rean, started 5 min ago) — v2.3.0 said t-late was first (lamport 1, alphabet)")
     for _ in range(3):
         rc, out = py("claim.py", ["heartbeat", "--task", "t-early", "--claims-dir", "team/claims"], repo)
         assert rc == 0, out
@@ -931,23 +957,23 @@ def main():
     case("12b", "Lamport inversion", "HOLE", c12b)
     case("12c", "index.json forgery", "NOT A HOLE", c12c)
     case("12d", "Pusher vs alphabet", "HOLE", c12d)
-    closed = sum(1 for r in results if r["v2.5.0"].startswith("CLOSED"))
-    partial = sum(1 for r in results if r["v2.5.0"].startswith("PARTIAL"))
-    still = sum(1 for r in results if "STILL HOLE" in r["v2.5.0"])
-    unchanged = sum(1 for r in results if r["v2.5.0"].startswith("UNCHANGED"))
-    boundary = sum(1 for r in results if r["v2.5.0"].startswith("BOUNDARY"))
-    errors = sum(1 for r in results if r["v2.5.0"].startswith("ERROR"))
+    closed = sum(1 for r in results if r["v2.7.0"].startswith("CLOSED"))
+    partial = sum(1 for r in results if r["v2.7.0"].startswith("PARTIAL"))
+    still = sum(1 for r in results if "STILL HOLE" in r["v2.7.0"])
+    unchanged = sum(1 for r in results if r["v2.7.0"].startswith("UNCHANGED"))
+    boundary = sum(1 for r in results if r["v2.7.0"].startswith("BOUNDARY"))
+    errors = sum(1 for r in results if r["v2.7.0"].startswith("ERROR"))
     doc = {
-        "generated_by": "rerun_rare_cases.py — TheRoster v2.5.0 (re-run of research_notes/rare-cases-theroster-20261115/report.md)",
+        "generated_by": "rerun_rare_cases.py — TheRoster v2.7.0 (re-run of research_notes/rare-cases-theroster-20261115/report.md)",
         "results": results,
         "summary": {"cases": len(results), "closed": closed, "partial": partial,
                     "still_hole": still, "unchanged": unchanged,
                     "boundary": boundary, "errors": errors},
     }
     (OUT / "rare-cases-rerun.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False))
-    print("\n================ RARE-CASES RERUN (v2.5.0) ================")
+    print("\n================ RARE-CASES RERUN (v2.7.0) ================")
     for r in results:
-        print(f"  {r['id']:>4}  {r['v2.5.0']}")
+        print(f"  {r['id']:>4}  {r['v2.7.0']}")
     print(f"\nDONE: {len(results)} cases — closed {closed}, partial {partial}, "
           f"still hole {still}, unchanged {unchanged}, boundary {boundary}, errors {errors}")
     print("->", OUT / "rare-cases-rerun.json")

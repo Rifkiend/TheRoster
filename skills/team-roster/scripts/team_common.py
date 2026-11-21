@@ -63,7 +63,7 @@ SEMVER_RE = re.compile(
 DEFAULT_CONFIG = {
     "canonical_remote": "origin",
     "canonical_branch": "main",
-    "skill_version": "2.6.0",
+    "skill_version": "2.7.0",
     "claim_ttl_minutes": 120,
     "heartbeat_minutes": 30,
     "grace_minutes": 15,
@@ -180,13 +180,100 @@ CLOCK_SKEW_FAIL_MINUTES = 15
 def is_impossibly_future(dt, at=None, tolerance_minutes=CLOCK_SKEW_FAIL_MINUTES):
     """True when `dt` is more than `tolerance_minutes` ahead of `at`
     (default: now). A skewed clock can write a future timestamp;
-    a correct one cannot. Only the ahead direction is detectable
-    from the record alone — a behind-skewed clock writes timestamps
-    that look exactly like genuinely old ones (see docs/v2.5-design.md §5)."""
+    a correct one cannot. The AHEAD direction is detectable from the
+    record alone; the BEHIND direction needs an external anchor — the
+    base commit's timestamp — see check_claim_base_skew() (v2.7)."""
     if dt is None:
         return False
     at = at or now()
     return (dt - at) > timedelta(minutes=tolerance_minutes)
+
+
+def git_commit_timestamp(repo_root, sha):
+    """Committer date of a commit as an aware datetime, or None when
+    the commit is unknown / git is unavailable / the date unparsable.
+
+    Uses %cI (committer date, strict ISO-8601): the committer date is
+    when the commit object came to exist; the author date (%aI) can be
+    far older (cherry-pick, rebase, GIT_AUTHOR_DATE), so it must not
+    be used as a "this commit existed by then" anchor."""
+    if not sha or not repo_root:
+        return None
+    r = run_git(["show", "-s", "--format=%cI", sha], cwd=repo_root)
+    if r.returncode != 0:
+        return None
+    return parse_time(r.stdout.strip())
+
+
+def check_claim_base_skew(claim, repo_root, grace_minutes=CLOCK_SKEW_FAIL_MINUTES):
+    """Behind-skew gate (v2.7). Returns an error string, or None when
+    the claim passes or cannot be judged.
+
+    Invariant: a claim cannot be created before the commit it is based
+    on exists — creation real-time R_c >= base-commit real-time R_B.
+    So started_at far BEFORE the creation base's timestamp means the
+    claim author's clock runs behind by more than the grace. The base
+    is `created_base_commit` (recorded once at claim time, never
+    mutated), falling back to `base_commit` — for a non-worktree claim
+    that IS the creation base (renewal only rewrites base_commit when
+    --worktree is passed).
+
+    Skips (None, no verdict) when there is no signal: no base recorded
+    (pre-v2.7 claim, non-git repo), base object unknown to this repo,
+    or started_at unparsable. A skip is not a pass — it is "cannot
+    tell", and the caller must not treat it as proof of a sane clock.
+
+    Honest limits: this only detects skew AT CLAIM CREATION time vs
+    the creation base. A clock that was sane at creation and drifts
+    later is not caught here (heartbeat staleness handles that
+    direction). And it cannot say WHOSE clock is wrong — a base author
+    with a >grace-fast clock produces a transient false FAIL; the
+    error names the base commit and both timestamps so a human can
+    tell which of the two clocks is off. Recovery: fix the clock
+    (NTP), release, re-claim."""
+    base = (claim.get("created_base_commit") or "") or (claim.get("base_commit") or "")
+    if not base:
+        return None
+    base_ts = git_commit_timestamp(repo_root, base)
+    if base_ts is None:
+        return None
+    started = parse_time(claim.get("started_at") or "")
+    if started is None:
+        return None
+    if started < base_ts - timedelta(minutes=grace_minutes):
+        return (f"started_at {claim.get('started_at')} is more than {grace_minutes} minutes BEFORE "
+                f"its creation base {base} ({to_utc_z(base_ts)}) — impossible: a claim cannot be "
+                "created before the commit it is based on exists. The claim author's clock runs "
+                "behind; fix the clock (NTP), release this claim and re-claim "
+                "(if the BASE author's clock was fast instead, this is a transient false FAIL — "
+                "release + re-claim once time has passed the base timestamp)")
+    return None
+
+
+def find_duplicate_created_seq(claims):
+    """Duplicate created_seq (v2.7). Returns a list of (seq, [task_ids])
+    for every seq > 0 shared by two or more DISTINCT claims.
+
+    created_seq is max-over-all-claims + 1, so a duplicate can only
+    arise from true concurrency (two agents reading the same max at
+    the same time) or hand-tampering. Seq <= 0 is ignored: pre-v2.4
+    claims carry no created_seq. The caller FAILs only when at least
+    TWO of the duplicates are active — a single active holder plus
+    released/done ones is unambiguous, and the released ones are dead
+    history that cannot be fixed without rewriting history."""
+    by_seq = {}
+    for tid, c in claims.items():
+        if not isinstance(c, dict):
+            continue
+        try:
+            seq = int(c.get("created_seq") or 0)
+        except (TypeError, ValueError):
+            seq = 0
+        if seq <= 0:
+            continue
+        by_seq.setdefault(seq, []).append(tid)
+    return sorted((seq, sorted(tids)) for seq, tids in by_seq.items()
+                  if len(set(tids)) > 1)
 
 
 # ---------------------------------------------------------------- json io
@@ -977,8 +1064,11 @@ def next_created_seq(claims_dir):
     compute the same number (both read max N, both write N+1). A
     file cannot be an atomic counter; the push fence (first push
     wins + claim_seq per file + claim check on merge) adjudicates
-    that race. created_seq orders creation within one repo's
-    visible history — it is not a distributed counter."""
+    that race — and since v2.7 the duplicate-created_seq gate
+    (find_duplicate_created_seq, enforced by claim.py check and
+    validate.py) FAILs the push until the active duplicate is
+    released and re-claimed. created_seq orders creation within one
+    repo's visible history — it is not a distributed counter."""
     best = 0
     for _stem, (_path, rec) in load_records(claims_dir).items():
         if not isinstance(rec, dict):

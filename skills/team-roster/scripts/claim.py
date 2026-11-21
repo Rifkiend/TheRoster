@@ -488,6 +488,16 @@ def cmd_check(claims_dir, roster_path, config_path):
         if _started is not None and _heartbeat is not None and _heartbeat < _started:
             errors.append(f"{task_id}: heartbeat_at {c['heartbeat_at']} is before started_at {c['started_at']} — "
                           "impossible; a heartbeat cannot predate the claim")
+        # Behind-skew gate (v2.7): started_at far BEFORE the creation
+        # base commit's timestamp is impossible — a claim cannot be
+        # created before its base exists. See
+        # team_common.check_claim_base_skew for the false-positive mode
+        # (a fast-clocked base author) and the skip cases (no base,
+        # unknown object, non-git repo).
+        _skew_err = tc.check_claim_base_skew(
+            c, root, grace_minutes=cfg.get("grace_minutes", tc.CLOCK_SKEW_FAIL_MINUTES))
+        if _skew_err:
+            errors.append(f"{task_id}: {_skew_err}")
         if roster_ids is not None and c.get("owner_id") not in roster_ids:
             if all_roster_ids is not None and c.get("owner_id") not in all_roster_ids:
                 # Ghost claim (v2.5): the owner is gone from the roster
@@ -612,6 +622,20 @@ def cmd_check(claims_dir, roster_path, config_path):
                 errors.append(f"CONFLICT: branch {br} is claimed by both {seen_wt_branch[br]} and {t} — one branch per worktree claim")
             else:
                 seen_wt_branch[br] = t
+    # Duplicate created_seq (v2.7): two claims sharing one seq can only
+    # come from true concurrency (both read the same max) or tampering —
+    # and then "who was first" is undefined for that pair. FAIL only
+    # when at least TWO duplicates are active: a single active holder
+    # plus released/done ones is unambiguous — the released ones are
+    # dead history, not a live conflict (and failing on them would
+    # brick the board with no way out short of rewriting history).
+    for _seq, _tids in tc.find_duplicate_created_seq(claims):
+        _active_dups = sorted(t for t in _tids
+                              if (claims.get(t) or {}).get("status") == "active")
+        if len(_active_dups) >= 2:
+            errors.append(f"CONFLICT: created_seq {_seq} is shared by {', '.join(sorted(_tids))} — "
+                          "two claims cannot be created at the same position; release one active "
+                          f"duplicate ({', '.join(_active_dups)}) and re-claim it (re-claim recomputes max+1)")
     # A worktree claim's base_commit must be a commit this repo knows,
     # its worktree must be present or accounted for, and its branch
     # must match the worktree on disk (v2.3.1: E2 + E8b).
@@ -920,6 +944,11 @@ def cmd_claim(args):
         "branch": branch,
         "worktree": worktree,
         "base_commit": tc.git_head_commit(),
+        # v2.7: creation base — recorded once, NEVER mutated (renewal
+        # only rewrites base_commit when --worktree is passed, because
+        # the worktree is rebased; this stays the creation base, so
+        # the behind-skew gate can compare started_at against it).
+        "created_base_commit": tc.git_head_commit(),
         "started_at": tc.to_utc_z(start),
         "expires_at": tc.to_utc_z(start + tc.timedelta(hours=hours)),
         "heartbeat_at": tc.to_utc_z(start),

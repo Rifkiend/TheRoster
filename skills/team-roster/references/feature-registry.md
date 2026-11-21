@@ -18,7 +18,7 @@ Satu fitur = satu file = satu *kemampuan* yang bisa dipanggil orang lain. Bukan 
 | `name` | yes | Nama yang dibaca manusia. |
 | `kind` | yes | `code`, `doc`, `design`, atau `process`. Non-code mendaftarkan `entry` berupa pointer (URL dokumen / path repo ke artefak), bukan `file:function`. |
 | `does` | yes | Satu kalimat: fitur ini ngapain. Kalau tidak bisa dijelaskan dalam satu kalimat, fiturnya terlalu besar — pecah. |
-| `entry` | yes | Cara memakainya. Untuk `kind: code`: `file:fungsi`, contoh `src/auth/login.py:login`. Untuk non-code: pointer seperti URL dokumen atau path repo. |
+| `entry` | yes | Cara memakainya. Untuk `kind: code`: `file:fungsi#baris`, contoh `src/auth/login.py:login#14` — `#baris` adalah baris definisi simbol itu (wajib untuk entry baru/berubah sejak v2.7; entry lama tanpa baris masih jalan, cuma warning). Untuk non-code: pointer seperti URL dokumen atau path repo. |
 | `entry_blob_sha` | code only | Git blob SHA dari file entry saat didaftarkan/diverifikasi. Diisi oleh `features.py reverify` terhadap repo asli. Di starter repo yang dikirim ini sudah terisi (file entry-nya ikut disertakan dan sudah di-`reverify`) — kalau blob berubah, entry dianggap *suspect* dan wajib di-reverify sebelum dipakai ulang. |
 | `files` | yes | File-file yang membentuk fitur ini. |
 | `keywords` | yes | Kata kunci pencarian, 2–5 kata, lowercase, NFKC, spasi tunggal. Pikirkan kata yang akan diketik AI lain saat cari fitur ini. |
@@ -79,6 +79,7 @@ Hook (dan CI twin) memverifikasi setiap entry fitur yang disentuh saat push:
 
 - File entry **ada** di tree yang di-push.
 - Simbol yang dinamai **ada** di file itu (heuristic stdlib-only: parse `ast` untuk Python, atau regex atas nama simbol — dokumentasikan bahwa ini heuristic, bukan parser penuh).
+- Sejak v2.7, kalau entry mengutip `#baris`, simbol itu harus **didefinisikan di baris itu persis** — simbol yang ada di tempat lain di file tidak memenuhi kutipan baris. Entry code baru atau yang berubah WAJIB membawa `#baris` (`register`/`improve` menolak yang tidak membawa); entry lama tanpa baris cuma warning (grandfather), dan `reverify` menambah barisnya kalau kosong atau meng-update-nya kalau simbol pindah (pindah baris bukan contract change — kontraknya `file:function`). Yang diverifikasi di sini adalah kebenaran **lokasi**, bukan kebenaran **deskripsi** — deskripsi tetap human-review.
 - `entry_blob_sha` file entry dicatat di fitur.
 
 Pada setiap pembacaan berikutnya, agent **wajib** mengecek `entry_blob_sha` terhadap file saat ini: kalau berbeda, entry itu *suspect* dan harus di-reverify (`features.py reverify`) sebelum dipakai ulang. **Rename harus meng-update registry di commit yang sama dengan rename-nya** — hook memblokir push kalau commit me-rename file yang terdaftar sebagai entry point tanpa meng-update `team/features/`.
@@ -126,7 +127,7 @@ python3 scripts/features.py cancel --id old-login --by <your-roster-id> --reason
 Fungsi atau schema database yang dipakai dua developer itu **interface bersama** — kontrak. Tandai:
 
 ```bash
-python3 scripts/features.py register --id login-api --name "Login API" --does "..." --entry src/auth/login.py:login --files src/auth/login.py --owner <you> --keywords login auth --contract --depends-on session-store@1.2.0 --breaking false --breaking-notes ""
+python3 scripts/features.py register --id login-api --name "Login API" --does "..." --entry src/auth/login.py:login#14 --files src/auth/login.py --owner <you> --keywords login auth --contract --depends-on session-store@1.2.0 --breaking false --breaking-notes ""
 ```
 
 - `--contract` menandai fitur sebagai interface bersama. File entry-nya sebaiknya bawa komentar `# roster-contract: <id>` (atau komentar setara di bahasa itu), supaya pembaca kode nemu registry-nya. `features.py check` cuma warning kalau marker-nya tidak ada — flag-nya sendiri yang jadi kontrol.

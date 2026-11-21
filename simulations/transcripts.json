@@ -1,5 +1,5 @@
 {
-  "generated_by": "run_simulations.py — script ASLI TheRoster v2.6.0",
+  "generated_by": "run_simulations.py — script ASLI TheRoster v2.7.0",
   "repo": "Rifkiend/TheRoster",
   "scenarios": [
     {
@@ -24,7 +24,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101 (assistant, until 2026-11-15T12:29:06Z): src/auth/login.py\nPick other work, or wait until their claim expires / is released.",
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101 (assistant, until 2026-11-21T19:56:42Z): src/auth/login.py\nPick other work, or wait until their claim expires / is released.",
           "note": "Satu file = satu pemilik. Klaim kedua DITOLAK sebelum kerja dimulai."
         },
         {
@@ -142,7 +142,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: 1 match(es) for 'login' (top-5, deterministic rank) — REUSE, do not rebuild:\n  #1 score=3 login-api [stable] v1.0.0 — Login dengan email + password, mengembalikan token sesi\n      entry: src/auth/login.py:login | owner: owner | used by: t-001\n      CONTRACT: shared interface — changing its entry needs --contract-change plus --bump major.",
+          "output": "FEATURES: 1 match(es) for 'login' (top-5, deterministic rank) — REUSE, do not rebuild:\n  #1 score=3 login-api [stable] v1.0.0 — Login dengan email + password, mengembalikan token sesi\n      entry: src/auth/login.py:login#14 | owner: owner | used by: t-001\n      CONTRACT: shared interface — changing its entry needs --contract-change plus --bump major.",
           "note": "Registry jawab: sudah ada login-api [stable] v1.0.0 — REUSE."
         },
         {
@@ -151,12 +151,12 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: login-api is now used by assistant (entry: src/auth/login.py:login).",
+          "output": "FEATURES: login-api is now used by assistant (entry: src/auth/login.py:login#14).",
           "note": ""
         },
         {
           "label": "Coba daftarkan login-api lagi dengan id yang sama",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id login-api --name Login API baru --does Login ulang --entry src/auth/login.py:login --owner assistant --keywords login auth --features-dir team/features --repo-root .",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id login-api --name Login API baru --does Login ulang --entry src/auth/login.py:login#14 --owner assistant --keywords login auth --features-dir team/features --repo-root .",
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
@@ -304,11 +304,11 @@
         },
         {
           "label": "Daftarkan payment-api sebagai experimental",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id payment-api --name Payment API --does Terima pembayaran, kembalikan status order --entry src/payment.py:charge --files src/payment.py --owner assistant --keywords payment bayar checkout --status experimental --breaking false --features-dir team/features --repo-root .",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id payment-api --name Payment API --does Terima pembayaran, kembalikan status order --entry src/payment.py:charge#1 --files src/payment.py --owner assistant --keywords payment bayar checkout --status experimental --breaking false --features-dir team/features --repo-root .",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: registered payment-api [experimental] v1.0.0 — entry src/payment.py:charge.\nRemember: commit + push the feature file so the next AI can find it.",
+          "output": "FEATURES: registered payment-api [experimental] v1.0.0 — entry src/payment.py:charge#1.\nRemember: commit + push the feature file so the next AI can find it.",
           "note": ""
         },
         {
@@ -558,7 +558,7 @@
         },
         {
           "label": "Ganti entry kontrak TANPA alasan dan TANPA bump major",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --id login-api --by assistant --entry src/auth/login.py:login_v2 --breaking false --features-dir team/features --repo-root .",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --id login-api --by assistant --entry src/auth/login.py:login_v2#26 --breaking false --features-dir team/features --repo-root .",
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
@@ -567,11 +567,11 @@
         },
         {
           "label": "Ganti entry DENGAN --bump major + --contract-change",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --id login-api --by assistant --bump major --entry src/auth/login.py:login_v2 --contract-change login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi --breaking true --breaking-notes login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi --note Entry login diganti ke login_v2 (kontrak berubah) --features-dir team/features --repo-root .",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --id login-api --by assistant --bump major --entry src/auth/login.py:login_v2#26 --contract-change login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi --breaking true --breaking-notes login_v2 kembalikan objek sesi, bukan token string — pemakai lama harus adaptasi --note Entry login diganti ke login_v2 (kontrak berubah) --features-dir team/features --repo-root .",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: login-api improved 1.0.0 -> 2.0.0 by assistant (entry: src/auth/login.py:login_v2).\nRemember: commit + push the feature file so the next AI builds on this version, not the old one.",
+          "output": "FEATURES: login-api improved 1.0.0 -> 2.0.0 by assistant (entry: src/auth/login.py:login_v2#26).\nRemember: commit + push the feature file so the next AI builds on this version, not the old one.",
           "note": "Perubahan tercatat di changes + breaking notes. login-api sekarang v2.0.0."
         },
         {
@@ -585,11 +585,11 @@
         },
         {
           "label": "Daftarkan checkout-api yang bergantung ke login-api@2.0.0",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id checkout-api --name Checkout API --does Checkout memakai login-api untuk sesi --entry src/checkout.py:checkout --files src/checkout.py --owner assistant --keywords checkout bayar --depends-on login-api@2.0.0 --status experimental --breaking false --features-dir team/features --repo-root .",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --id checkout-api --name Checkout API --does Checkout memakai login-api untuk sesi --entry src/checkout.py:checkout#1 --files src/checkout.py --owner assistant --keywords checkout bayar --depends-on login-api@2.0.0 --status experimental --breaking false --features-dir team/features --repo-root .",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: registered checkout-api [experimental] v1.0.0 — entry src/checkout.py:checkout.\nRemember: commit + push the feature file so the next AI can find it.",
+          "output": "FEATURES: registered checkout-api [experimental] v1.0.0 — entry src/checkout.py:checkout#1.\nRemember: commit + push the feature file so the next AI can find it.",
           "note": ""
         },
         {
@@ -598,7 +598,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: login-api improved 2.0.0 -> 3.0.0 by owner (entry: src/auth/login.py:login_v2).\nRemember: commit + push the feature file so the next AI builds on this version, not the old one.",
+          "output": "FEATURES: login-api improved 2.0.0 -> 3.0.0 by owner (entry: src/auth/login.py:login_v2#26).\nRemember: commit + push the feature file so the next AI builds on this version, not the old one.",
           "note": ""
         },
         {
@@ -616,7 +616,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: checkout-api re-verified by assistant — entry src/checkout.py:checkout, blob a70a8933d6d2ad84715bb6e2753efa3e372387ba\nFEATURES: dependency refreshed: login-api 2.0.0 -> 3.0.0",
+          "output": "FEATURES: checkout-api re-verified by assistant — entry src/checkout.py:checkout#1, blob a70a8933d6d2ad84715bb6e2753efa3e372387ba\nFEATURES: dependency refreshed: login-api 2.0.0 -> 3.0.0",
           "note": ""
         },
         {
@@ -855,7 +855,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-201 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alice [wt/t-201]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alice wt/t-201 fcef30fe17a0d45211586dd46e1ca260d0a62df3",
+          "output": "CLAIM: OK — t-201 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alice [wt/t-201]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alice wt/t-201 e894388757a8ed1c2158e6b7d11028b76da44450",
           "note": "Klaim mencatat worktree + branch (default wt/t-201) + base_commit."
         },
         {
@@ -864,16 +864,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "t-201 on main: worktree=../wt-alice branch=wt/t-201 base=fcef30fe",
+          "output": "t-201 on main: worktree=../wt-alice branch=wt/t-201 base=e8943887",
           "note": "Klaim di-push sendirian ke main DULU — papan tidak hilang (anti-jebakan Dziatkovskii)."
         },
         {
           "label": "[main] worktree_setup.sh membuat worktree Alice",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-alice wt/t-201 fcef30fe17a0d45211586dd46e1ca260d0a62df3",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-alice wt/t-201 e894388757a8ed1c2158e6b7d11028b76da44450",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at fcef30f starter + worktree_mode per-claim\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-alice on branch wt/t-201 (base fcef30fe17a0d45211586dd46e1ca260d0a62df3)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-alice\nPreparing worktree (new branch 'wt/t-201')",
+          "output": "HEAD is now at e894388 starter + worktree_mode per-claim\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-alice on branch wt/t-201 (base e894388757a8ed1c2158e6b7d11028b76da44450)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-alice\nPreparing worktree (new branch 'wt/t-201')",
           "note": ""
         },
         {
@@ -909,16 +909,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-202 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-bob [wt/t-202]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-bob wt/t-202 e26735053625115a39dc94745898ccee82bafb06",
+          "output": "CLAIM: OK — t-202 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-bob [wt/t-202]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-bob wt/t-202 808c86c06ff2e0a84b0776bc5b6b3788745cf08f",
           "note": "Dua klaim worktree di worktree BERBEDA boleh menutupi file yang sama."
         },
         {
           "label": "[main] worktree_setup.sh membuat worktree Bob",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-bob wt/t-202 e26735053625115a39dc94745898ccee82bafb06",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-bob wt/t-202 808c86c06ff2e0a84b0776bc5b6b3788745cf08f",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at e267350 claim: t-201 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-bob on branch wt/t-202 (base e26735053625115a39dc94745898ccee82bafb06)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-bob\nPreparing worktree (new branch 'wt/t-202')",
+          "output": "HEAD is now at 808c86c claim: t-201 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-bob on branch wt/t-202 (base 808c86c06ff2e0a84b0776bc5b6b3788745cf08f)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-bob\nPreparing worktree (new branch 'wt/t-202')",
           "note": ""
         },
         {
@@ -936,7 +936,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — no last-known-main-SHA recorded yet — run sync_check to record one\nSYNC CHECK: note — worktree claim t-201: branch wt/t-201 merges cleanly onto origin/main (2 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA 34c55888 in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "output": "SYNC CHECK: note — no last-known-main-SHA recorded yet — run sync_check to record one\nSYNC CHECK: note — worktree claim t-201: branch wt/t-201 merges cleanly onto origin/main (2 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA d66388bb in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
           "note": ""
         },
         {
@@ -945,7 +945,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — recorded main SHA 34c55888 is an ancestor of origin/main\nSYNC CHECK: note — worktree claim t-202: branch wt/t-202 merges cleanly onto origin/main (3 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA 11f5193b in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "output": "SYNC CHECK: note — recorded main SHA d66388bb is an ancestor of origin/main\nSYNC CHECK: note — worktree claim t-202: branch wt/t-202 merges cleanly onto origin/main (3 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA dbb9ef7e in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
           "note": "Merge satu per satu — Bob berbasis base lama, tapi editnya di baris berbeda."
         },
         {
@@ -981,16 +981,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-203 claimed by owner for 2h — files: tests/test_login.py — worktree ../wt-carol [wt/t-203]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-carol wt/t-203 cfd95401d0ac545be18a19eabe6e8e8e30e4430b",
+          "output": "CLAIM: OK — t-203 claimed by owner for 2h — files: tests/test_login.py — worktree ../wt-carol [wt/t-203]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-carol wt/t-203 dd7fc12db2b487f50b88a338312efb24f93a28a2",
           "note": ""
         },
         {
           "label": "[main] worktree_setup.sh membuat worktree Carol",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-carol wt/t-203 cfd95401d0ac545be18a19eabe6e8e8e30e4430b",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-carol wt/t-203 dd7fc12db2b487f50b88a338312efb24f93a28a2",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at cfd9540 merge wt/t-202 (t-202)\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-carol on branch wt/t-203 (base cfd95401d0ac545be18a19eabe6e8e8e30e4430b)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-carol\nPreparing worktree (new branch 'wt/t-203')",
+          "output": "HEAD is now at dd7fc12 merge wt/t-202 (t-202)\nworktree_setup: OK — worktree /tmp/sim-work/s7-worktree/wt-carol on branch wt/t-203 (base dd7fc12db2b487f50b88a338312efb24f93a28a2)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s7-worktree/wt-carol\nPreparing worktree (new branch 'wt/t-203')",
           "note": ""
         },
         {
@@ -999,7 +999,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — recorded main SHA 11f5193b is an ancestor of origin/main\nSYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-203: branch wt/t-203 is 26 commits behind origin/main (limit 20) — rebase the worktree onto origin/main first, then re-run\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "output": "SYNC CHECK: note — recorded main SHA dbb9ef7e is an ancestor of origin/main\nSYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-203: branch wt/t-203 is 26 commits behind origin/main (limit 20) — rebase the worktree onto origin/main first, then re-run\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
           "note": "Worktree yang tertinggal wajib rebase dulu ke origin/main."
         },
         {
@@ -1008,7 +1008,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — recorded main SHA 11f5193b is an ancestor of origin/main\nSYNC CHECK: note — worktree claim t-203: branch wt/t-203 merges cleanly onto origin/main (0 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA f6e434dd in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "output": "SYNC CHECK: note — recorded main SHA dbb9ef7e is an ancestor of origin/main\nSYNC CHECK: note — worktree claim t-203: branch wt/t-203 merges cleanly onto origin/main (0 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA c2be7d97 in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
           "note": ""
         },
         {
@@ -1114,7 +1114,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-801 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alias [wt/t-801]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alias wt/t-801 c43c45666db08f7e93b909be69496506f9153e2d",
+          "output": "CLAIM: OK — t-801 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-alias [wt/t-801]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-alias wt/t-801 cf12054b415c36afdf5831fc9df3a76d1b27ffbc",
           "note": "Klaim pertama diterima; worktree belum dibuat (jendela klaim-dulu-baru-setup)."
         },
         {
@@ -1123,7 +1123,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-801 (assistant, until 2026-11-15T12:29:12Z): tests/test_login.py\nPick other work, or wait until their claim expires / is released.",
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-801 (assistant, until 2026-11-21T19:56:48Z): tests/test_login.py\nPick other work, or wait until their claim expires / is released.",
           "note": "v2.3.0: DITERIMA (cacat — string mentah dibandingkan). v2.3.1: path dikanonikalisasi, jadi ini worktree yang sama."
         },
         {
@@ -1150,16 +1150,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-803 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-del [wt/t-803]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-del wt/t-803 2f7480b1c7bd26a886aa968b25b0649a74a217af",
+          "output": "CLAIM: OK — t-803 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-del [wt/t-803]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-del wt/t-803 7ec1710dbf264c6c2d9007c4e395dcb8044d76d1",
           "note": ""
         },
         {
           "label": "[main] E2: worktree_setup.sh membuat worktree",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-del wt/t-803 2f7480b1c7bd26a886aa968b25b0649a74a217af",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-del wt/t-803 7ec1710dbf264c6c2d9007c4e395dcb8044d76d1",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at 2f7480b claim: t-801 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-del on branch wt/t-803 (base 2f7480b1c7bd26a886aa968b25b0649a74a217af)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-del\nPreparing worktree (new branch 'wt/t-803')",
+          "output": "HEAD is now at 7ec1710 claim: t-801 [claim #2]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-del on branch wt/t-803 (base 7ec1710dbf264c6c2d9007c4e395dcb8044d76d1)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-del\nPreparing worktree (new branch 'wt/t-803')",
           "note": ""
         },
         {
@@ -1204,7 +1204,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-804 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-remote [wt/t-804]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-remote wt/t-804 b54f213a59050707cba87cab728a1da89b8f4298",
+          "output": "CLAIM: OK — t-804 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-remote [wt/t-804]\nCommit trailer to use on every commit touching these files: [claim #4]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-remote wt/t-804 c4212ca9f8fa36987b800480bea85179da11843f",
           "note": ""
         },
         {
@@ -1222,7 +1222,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — no last-known-main-SHA recorded yet — run sync_check to record one\nSYNC CHECK: note — worktree claim t-804: worktree ../wt-remote is not present on this machine — merge check skipped here; the merge is the PR's job\nSYNC CHECK: note — recorded last-known-main-SHA 3badf0ee in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "output": "SYNC CHECK: note — no last-known-main-SHA recorded yet — run sync_check to record one\nSYNC CHECK: note — worktree claim t-804: worktree ../wt-remote is not present on this machine — merge check skipped here; the merge is the PR's job\nSYNC CHECK: note — recorded last-known-main-SHA 83bada2d in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
           "note": "Merge check diserahkan ke PR, sesuai desain v2.3."
         },
         {
@@ -1231,16 +1231,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-805 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-dirty [wt/t-805]\nCommit trailer to use on every commit touching these files: [claim #5]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-dirty wt/t-805 3badf0ee7cd592b938d42cea04226f8e63aa7660",
+          "output": "CLAIM: OK — t-805 claimed by assistant for 2h — files: tests/test_login.py — worktree ../wt-dirty [wt/t-805]\nCommit trailer to use on every commit touching these files: [claim #5]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-dirty wt/t-805 83bada2d8f90795c881151cd119b8fc4b6339409",
           "note": ""
         },
         {
           "label": "[main] E5: worktree_setup.sh membuat worktree",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-dirty wt/t-805 3badf0ee7cd592b938d42cea04226f8e63aa7660",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-dirty wt/t-805 83bada2d8f90795c881151cd119b8fc4b6339409",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at 3badf0e claim: t-804 [claim #4]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-dirty on branch wt/t-805 (base 3badf0ee7cd592b938d42cea04226f8e63aa7660)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-dirty\nPreparing worktree (new branch 'wt/t-805')",
+          "output": "HEAD is now at 83bada2 claim: t-804 [claim #4]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-dirty on branch wt/t-805 (base 83bada2d8f90795c881151cd119b8fc4b6339409)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-dirty\nPreparing worktree (new branch 'wt/t-805')",
           "note": ""
         },
         {
@@ -1258,7 +1258,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — recorded main SHA 3badf0ee is an ancestor of origin/main\nSYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-805: worktree ../wt-dirty has uncommitted changes — commit them first; the merge check only sees commits, so this work is not part of the merge:  M tests/test_login.py\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "output": "SYNC CHECK: note — recorded main SHA 83bada2d is an ancestor of origin/main\nSYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-805: worktree ../wt-dirty has uncommitted changes — commit them first; the merge check only sees commits, so this work is not part of the merge:  M tests/test_login.py\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
           "note": "v2.3.0: exit 0 + 'Safe to push' padahal kerja belum ada di branch. v2.3.1: gagal, 'commit dulu'."
         },
         {
@@ -1267,7 +1267,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — recorded main SHA 3badf0ee is an ancestor of origin/main\nSYNC CHECK: note — worktree claim t-805: branch wt/t-805 merges cleanly onto origin/main (1 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA f438d52a in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "output": "SYNC CHECK: note — recorded main SHA 83bada2d is an ancestor of origin/main\nSYNC CHECK: note — worktree claim t-805: branch wt/t-805 merges cleanly onto origin/main (1 commits behind, within the 20 limit)\nSYNC CHECK: note — recorded last-known-main-SHA 9be4af74 in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
           "note": ""
         },
         {
@@ -1276,16 +1276,16 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-806 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-mm [wt/t-806]\nCommit trailer to use on every commit touching these files: [claim #6]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-mm wt/t-806 f438d52af9bd9f6ef46efc4c8ff925a47e40775e",
+          "output": "CLAIM: OK — t-806 claimed by teammate-1 for 2h — files: tests/test_login.py — worktree ../wt-mm [wt/t-806]\nCommit trailer to use on every commit touching these files: [claim #6]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-mm wt/t-806 9be4af745a7a12b0a4c7eddfcf2a84c674335ec3",
           "note": ""
         },
         {
           "label": "[main] E8b: worktree_setup.sh membuat worktree",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-mm wt/t-806 f438d52af9bd9f6ef46efc4c8ff925a47e40775e",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-mm wt/t-806 9be4af745a7a12b0a4c7eddfcf2a84c674335ec3",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at f438d52 claim: t-805 [claim #5]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-mm on branch wt/t-806 (base f438d52af9bd9f6ef46efc4c8ff925a47e40775e)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-mm\nPreparing worktree (new branch 'wt/t-806')",
+          "output": "HEAD is now at 9be4af7 claim: t-805 [claim #5]\nworktree_setup: OK — worktree /tmp/sim-work/s8-worktree-gates/wt-mm on branch wt/t-806 (base 9be4af745a7a12b0a4c7eddfcf2a84c674335ec3)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s8-worktree-gates/wt-mm\nPreparing worktree (new branch 'wt/t-806')",
           "note": ""
         },
         {
@@ -1312,7 +1312,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — recorded main SHA f438d52a is an ancestor of origin/main\nSYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-806: worktree at ../wt-mm is on branch wt/t-806, but the claim says main — fix the claim or the worktree\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
+          "output": "SYNC CHECK: note — recorded main SHA 9be4af74 is an ancestor of origin/main\nSYNC CHECK: FAIL — the remote moved while you were working:\n  - worktree claim t-806: worktree at ../wt-mm is on branch wt/t-806, but the claim says main — fix the claim or the worktree\nSTOP: git fetch + rebase onto origin/main, re-read team/features and team/claims, then continue\non top of the new version — or stop if it conflicts. Never --force push.",
           "note": "Sudah gagal di v2.3.0 juga — regresi, jangan sampai rusak."
         },
         {
@@ -1448,7 +1448,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "doctor: python3 3.12.3 OK\ndoctor: git repo OK (/tmp/sim-work/s9-signed-identity/work-main)\ndoctor: team/roster/ OK\ndoctor: team/claims/ OK\ndoctor: team/features/ OK\ndoctor: skill_version 2.6.0 matches SKILL.md OK\ndoctor: all scripts in /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts compile OK\ndoctor: CI mode — local pre-push hook check skipped (no local hook in CI)\ndoctor: require_signatures=true — checking signature support\ndoctor: ssh-keygen present OK\ndoctor: every active roster member has a public_key OK\nFANOUT CHECK: OK — fan-out group records valid.\nGATES CHECK: OK — gate records valid.\nRECEIPTS CHECK: OK — receipt records valid.\nREVIEWS CHECK: OK — review records valid.\nDOCTOR: OK — healthy. You may start work (load the roster first).",
+          "output": "doctor: python3 3.12.3 OK\ndoctor: git repo OK (/tmp/sim-work/s9-signed-identity/work-main)\ndoctor: team/roster/ OK\ndoctor: team/claims/ OK\ndoctor: team/features/ OK\ndoctor: skill_version 2.7.0 matches SKILL.md OK\ndoctor: all scripts in /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts compile OK\ndoctor: CI mode — local pre-push hook check skipped (no local hook in CI)\ndoctor: require_signatures=true — checking signature support\ndoctor: ssh-keygen present OK\ndoctor: every active roster member has a public_key OK\nFANOUT CHECK: OK — fan-out group records valid.\nGATES CHECK: OK — gate records valid.\nRECEIPTS CHECK: OK — receipt records valid.\nREVIEWS CHECK: OK — review records valid.\nDOCTOR: OK — healthy. You may start work (load the roster first).",
           "note": "Doctor --ci (tanpa hook lokal) + --skill-dir menunjuk skill asli, supaya cek versi ikut jalan."
         },
         {
@@ -1547,7 +1547,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - signature: commit d329a6e9 is not signed by owner's key — signature verification failed",
+          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - signature: commit dcf818e1 is not signed by owner's key — signature verification failed",
           "note": "v2.3: tidak ada yang memeriksa tanda tangan sama sekali — klaim ini lolos. v2.4: FAIL."
         },
         {
@@ -1601,7 +1601,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - signature: commit 34c325b9 is not signed by assistant's key — No principal matched.",
+          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - signature: commit 58c356f0 is not signed by assistant's key — No principal matched.",
           "note": "v2.3: lolos tanpa jejak (validate exit 0). v2.4: verify-commit melawan allowed-signers yang hanya berisi key assistant — gagal."
         },
         {
@@ -1646,7 +1646,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "doctor: python3 3.12.3 OK\ndoctor: git repo OK (/tmp/sim-work/s9-signed-identity/work-main)\ndoctor: team/roster/ OK\ndoctor: team/claims/ OK\ndoctor: team/features/ OK\ndoctor: skill_version 2.6.0 matches SKILL.md OK\ndoctor: all scripts in /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts compile OK\ndoctor: CI mode — local pre-push hook check skipped (no local hook in CI)\ndoctor: require_signatures=true — checking signature support\ndoctor: ssh-keygen present OK\nFANOUT CHECK: OK — fan-out group records valid.\nGATES CHECK: OK — gate records valid.\nRECEIPTS CHECK: OK — receipt records valid.\nREVIEWS CHECK: OK — review records valid.\ndoctor: warning — require_signatures is on but these active members have no public_key on the roster: assistant — they cannot push team/ changes until a key is added (human-approved roster change)\nDOCTOR: OK — healthy. You may start work (load the roster first).\n\nASSERT OK: doctor warns (exit 0) when a member has no key; key restored",
+          "output": "doctor: python3 3.12.3 OK\ndoctor: git repo OK (/tmp/sim-work/s9-signed-identity/work-main)\ndoctor: team/roster/ OK\ndoctor: team/claims/ OK\ndoctor: team/features/ OK\ndoctor: skill_version 2.7.0 matches SKILL.md OK\ndoctor: all scripts in /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts compile OK\ndoctor: CI mode — local pre-push hook check skipped (no local hook in CI)\ndoctor: require_signatures=true — checking signature support\ndoctor: ssh-keygen present OK\nFANOUT CHECK: OK — fan-out group records valid.\nGATES CHECK: OK — gate records valid.\nRECEIPTS CHECK: OK — receipt records valid.\nREVIEWS CHECK: OK — review records valid.\ndoctor: warning — require_signatures is on but these active members have no public_key on the roster: assistant — they cannot push team/ changes until a key is added (human-approved roster change)\nDOCTOR: OK — healthy. You may start work (load the roster first).\n\nASSERT OK: doctor warns (exit 0) when a member has no key; key restored",
           "note": "Peringatan dini, bukan gagal di push — key masuk lewat perubahan roster yang disetujui manusia."
         },
         {
@@ -1664,7 +1664,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-905 (assistant, until 2026-11-15T12:29:18Z): tests/test_a.py\nPick other work, or wait until their claim expires / is released.",
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-905 (assistant, until 2026-11-21T19:56:54Z): tests/test_a.py\nPick other work, or wait until their claim expires / is released.",
           "note": "Yang duluan (created_seq 5) menang — pesan konflik menyebut t-905."
         },
         {
@@ -1673,7 +1673,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: heartbeat t-905 at 2026-11-15T10:29:18Z (claim #1). Commit + push the claim file.\nCLAIM: heartbeat t-905 at 2026-11-15T10:29:18Z (claim #1). Commit + push the claim file.",
+          "output": "CLAIM: heartbeat t-905 at 2026-11-21T17:56:55Z (claim #1). Commit + push the claim file.\nCLAIM: heartbeat t-905 at 2026-11-21T17:56:55Z (claim #1). Commit + push the claim file.",
           "note": "Inilah inversi Lamport dari kasus langka §12b: klaim yang rajin heartbeat jadi 'lebih muda'."
         },
         {
@@ -1722,13 +1722,22 @@
           "note": "created_seq 6."
         },
         {
-          "label": "[main] B9: mundurkan started_at t-908 ke 25 jam lalu, heartbeat tetap segar",
-          "cmd": "python3 -c import json\nfrom datetime import datetime, timedelta, timezone\nnow = datetime.now(timezone.utc)\np = 'team/claims/t-908.json'\nc = json.load(open(p))\nfmt = lambda d: d.strftime('%Y-%m-%dT%H:%M:%SZ')\nc['started_at'] = fmt(now - timedelta(hours=25))\nc['heartbeat_at'] = fmt(now)\nc['expires_at'] = fmt(now + timedelta(hours=2))\njson.dump(c, open(p, 'w'), indent=2, sort_keys=True)\nprint('t-908: started 25h lalu, heartbeat sekarang, expiry 2h lagi')",
+          "label": "[main] B9a: buat commit kosong 25 jam lalu — base t-908 yang setia",
+          "cmd": "python3 -c import os, subprocess\nfrom datetime import datetime, timedelta, timezone\nold = datetime.now(timezone.utc) - timedelta(hours=25)\nstamp = '@%d +0000' % int(old.timestamp())\nenv = dict(os.environ, GIT_AUTHOR_DATE=stamp, GIT_COMMITTER_DATE=stamp)\nr = subprocess.run(['git', 'commit', '-q', '--allow-empty', '-m', 'old base for t-908'],\n                   capture_output=True, text=True, env=env)\nassert r.returncode == 0, r.stderr\nprint('old base commit:', subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip())",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "t-908: started 25h lalu, heartbeat sekarang, expiry 2h lagi",
-          "note": "Kasus langka §10: heartbeat selamanya — klaim yang tidak pernah mati selama owner-nya rajin heartbeat."
+          "output": "old base commit: e7728479943ddd289671846235cf13bc34863d12",
+          "note": "Klaim yang genuinely 25 jam tua membawa base 25 jam tua juga. Tanpa base tua, gate behind-skew v2.7 akan salah mengira klaim tua sebagai jam yang ketinggalan. Commit kosong ini tidak menyentuh team/ — tidak kena cek tanda tangan."
+        },
+        {
+          "label": "[main] B9: mundurkan started_at t-908 ke 25 jam lalu, heartbeat tetap segar",
+          "cmd": "python3 -c import json, subprocess\nfrom datetime import datetime, timedelta, timezone\nnow = datetime.now(timezone.utc)\np = 'team/claims/t-908.json'\nc = json.load(open(p))\nfmt = lambda d: d.strftime('%Y-%m-%dT%H:%M:%SZ')\nc['started_at'] = fmt(now - timedelta(hours=25))\nc['heartbeat_at'] = fmt(now)\nc['expires_at'] = fmt(now + timedelta(hours=2))\nsha = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()\nc['base_commit'] = sha\nc['created_base_commit'] = sha\njson.dump(c, open(p, 'w'), indent=2, sort_keys=True)\nprint('t-908: started 25h lalu, heartbeat sekarang, expiry 2h lagi, base = commit 25h lalu')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "t-908: started 25h lalu, heartbeat sekarang, expiry 2h lagi, base = commit 25h lalu",
+          "note": "Kasus langka §10: heartbeat selamanya — klaim yang tidak pernah mati selama owner-nya rajin heartbeat. Base-nya ikut dimundurkan ke commit 25 jam lalu (B9a): klaim tua yang setia membawa base tua."
         },
         {
           "label": "[main] B10: is_blocking(t-908) HARUS False — melewati max_lifetime_hours 24",
@@ -1763,7 +1772,7 @@
           "exit": 1,
           "expected": "fail",
           "gate_ok": true,
-          "output": "CLAIM: FAIL — t-908 is past its max lifetime of 24h (started 2026-11-14T09:29:18Z) — renewal is refused; release it and re-claim as a new task",
+          "output": "CLAIM: FAIL — t-908 is past its max lifetime of 24h (started 2026-11-20T16:56:55Z) — renewal is refused; release it and re-claim as a new task",
           "note": "Renewal bukan jalan memutar: lepas klaimnya dan klaim ulang sebagai tugas baru (created_seq baru, jejak audit jujur)."
         },
         {
@@ -1808,7 +1817,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-15T10:29:19Z). Commit + push it so the reader sees it.",
+          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-21T17:56:56Z). Commit + push it so the reader sees it.",
           "note": "File dikosongkan dulu — mailbox bersifat append-only, baris tanpa sig harus diganti, bukan ditumpuk."
         },
         {
@@ -1916,7 +1925,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-15T10:29:20Z). Commit + push it so the reader sees it.",
+          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-21T17:56:57Z). Commit + push it so the reader sees it.",
           "note": ""
         },
         {
@@ -2070,7 +2079,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! signature: commit b0e18cde touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - deletion: team/claims/t-001.json existed on origin/main and was deleted in this push — team/ records are never deleted; release the claim, cancel the feature, or retire the member instead (deletion erases the audit trail)\n\nASSERT OK: failed as expected",
+          "output": "! signature: commit 502a9e57 touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - deletion: team/claims/t-001.json existed on origin/main and was deleted in this push — team/ records are never deleted; release the claim, cancel the feature, or retire the member instead (deletion erases the audit trail)\n\nASSERT OK: failed as expected",
           "note": "Kasus langka §2: penghapusan record = penghapusan jejak audit. Jalan yang benar: release klaimnya."
         },
         {
@@ -2106,7 +2115,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! signature: commit 845b2420 touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - deletion: team/features/price-monitor.json existed on origin/main and was deleted in this push — team/ records are never deleted; release the claim, cancel the feature, or retire the member instead (deletion erases the audit trail)\n\nASSERT OK: failed as expected",
+          "output": "! signature: commit 4733df1e touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - deletion: team/features/price-monitor.json existed on origin/main and was deleted in this push — team/ records are never deleted; release the claim, cancel the feature, or retire the member instead (deletion erases the audit trail)\n\nASSERT OK: failed as expected",
           "note": "Batalkan fitur lewat status cancelled — filenya tetap ada sebagai jejak."
         },
         {
@@ -2142,7 +2151,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! signature: commit 9eddf2ac touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - deletion: team/roster/teammate-1.json existed on origin/main and was deleted in this push — team/ records are never deleted; release the claim, cancel the feature, or retire the member instead (deletion erases the audit trail)\n\nASSERT OK: failed as expected",
+          "output": "! signature: commit 4210ccf5 touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - deletion: team/roster/teammate-1.json existed on origin/main and was deleted in this push — team/ records are never deleted; release the claim, cancel the feature, or retire the member instead (deletion erases the audit trail)\n\nASSERT OK: failed as expected",
           "note": "Anggota keluar lewat status retired — recordnya tetap ada."
         },
         {
@@ -2196,7 +2205,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! deletion: team/claims/t-999.json was added and deleted inside this push — it never existed on the shared history, so nothing was erased\n  ! signature: commit 6c6cb729 touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: OK — 3 roster member(s), 1 claim(s), 2 feature(s), 1 PRD item(s), 0 fan-out group(s), 0 gate(s), 0 receipt(s), 0 review(s) cross-checked; 9 team/ file(s) scanned for secrets/PII.\n\nASSERT OK: passed with the expected warning/text",
+          "output": "! deletion: team/claims/t-999.json was added and deleted inside this push — it never existed on the shared history, so nothing was erased\n  ! signature: commit 6a675f59 touches team/ records that cannot be read as of that commit — signature not checked (deletion detection is a separate item)\n  ! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: OK — 3 roster member(s), 1 claim(s), 2 feature(s), 1 PRD item(s), 0 fan-out group(s), 0 gate(s), 0 receipt(s), 0 review(s) cross-checked; 9 team/ file(s) scanned for secrets/PII.\n\nASSERT OK: passed with the expected warning/text",
           "note": "Bukan sabotase: file itu tidak pernah ada di histori bersama, tidak ada jejak yang hilang."
         },
         {
@@ -2295,7 +2304,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - trailer: commit 5c9cb0c9 touches tests/test_login.py, claimed by t-1001 (claim #2) — the commit carries no matching [claim #N] trailer and signed by the claim owner's key; add the trailer (claim.py prints it) and re-commit\n\nASSERT OK: failed as expected",
+          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - trailer: commit 900ddaa9 touches tests/test_login.py, claimed by t-1001 (claim #2) — the commit carries no matching [claim #N] trailer and signed by the claim owner's key; add the trailer (claim.py prints it) and re-commit\n\nASSERT OK: failed as expected",
           "note": "Kasus langka §2: pagar [claim #N] selama ini hanya docstring — sekarang dibaca."
         },
         {
@@ -2367,7 +2376,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - trailer: commit 72fa20e4 touches tests/test_login.py, claimed by t-1001 (claim #2) — the commit carries no matching [claim #N] trailer and signed by the claim owner's key; add the trailer (claim.py prints it) and re-commit\n\nASSERT OK: failed as expected",
+          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - trailer: commit 3d3f6b08 touches tests/test_login.py, claimed by t-1001 (claim #2) — the commit carries no matching [claim #N] trailer and signed by the claim owner's key; add the trailer (claim.py prints it) and re-commit\n\nASSERT OK: failed as expected",
           "note": "Nomor klaim yang salah sama bahayanya dengan tidak ada trailer — bukan klaim lo."
         },
         {
@@ -2421,7 +2430,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: heartbeat t-1001 at 2026-11-15T10:29:23Z (claim #2). Commit + push the claim file.",
+          "output": "CLAIM: heartbeat t-1001 at 2026-11-21T17:57:00Z (claim #2). Commit + push the claim file.",
           "note": ""
         },
         {
@@ -2651,20 +2660,20 @@
         },
         {
           "label": "[main] E1: register feat-a (tanpa dependensi)",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --features-dir team/features --id feat-a --name Fitur A --does melakukan A --entry src/feat_a.py:run_a --owner assistant --files src/feat_a.py --keywords a --breaking false",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --features-dir team/features --id feat-a --name Fitur A --does melakukan A --entry src/feat_a.py:run_a#1 --owner assistant --files src/feat_a.py --keywords a --breaking false",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: registered feat-a [experimental] v1.0.0 — entry src/feat_a.py:run_a.\nRemember: commit + push the feature file so the next AI can find it.",
+          "output": "FEATURES: registered feat-a [experimental] v1.0.0 — entry src/feat_a.py:run_a#1.\nRemember: commit + push the feature file so the next AI can find it.",
           "note": ""
         },
         {
           "label": "[main] E2: register feat-b yang depend ke feat-a",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --features-dir team/features --id feat-b --name Fitur B --does melakukan B --entry src/feat_b.py:run_b --owner assistant --files src/feat_b.py --keywords b --depends-on feat-a@1.0.0 --breaking false",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --features-dir team/features --id feat-b --name Fitur B --does melakukan B --entry src/feat_b.py:run_b#1 --owner assistant --files src/feat_b.py --keywords b --depends-on feat-a@1.0.0 --breaking false",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: registered feat-b [experimental] v1.0.0 — entry src/feat_b.py:run_b.\nRemember: commit + push the feature file so the next AI can find it.",
+          "output": "FEATURES: registered feat-b [experimental] v1.0.0 — entry src/feat_b.py:run_b#1.\nRemember: commit + push the feature file so the next AI can find it.",
           "note": ""
         },
         {
@@ -2732,11 +2741,11 @@
         },
         {
           "label": "[main] E10: register feat-c (tanpa dependensi)",
-          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --features-dir team/features --id feat-c --name Fitur C --does melakukan C --entry src/feat_c.py:run_c --owner assistant --files src/feat_c.py --keywords c --breaking false",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --features-dir team/features --id feat-c --name Fitur C --does melakukan C --entry src/feat_c.py:run_c#1 --owner assistant --files src/feat_c.py --keywords c --breaking false",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FEATURES: registered feat-c [experimental] v1.0.0 — entry src/feat_c.py:run_c.\nRemember: commit + push the feature file so the next AI can find it.",
+          "output": "FEATURES: registered feat-c [experimental] v1.0.0 — entry src/feat_c.py:run_c#1.\nRemember: commit + push the feature file so the next AI can find it.",
           "note": ""
         },
         {
@@ -2790,7 +2799,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — no last-known-main-SHA recorded yet — run sync_check to record one\nSYNC CHECK: note — recorded last-known-main-SHA eb579bb0 in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "output": "SYNC CHECK: note — no last-known-main-SHA recorded yet — run sync_check to record one\nSYNC CHECK: note — recorded last-known-main-SHA f8c16172 in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
           "note": "Tripwire dipasang: SHA main yang terverifikasi masuk ke team/config.json."
         },
         {
@@ -2817,7 +2826,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: FAIL — recorded main SHA eb579bb018778327e090784c9c2ba4774bddc367 is NOT an ancestor of origin/main — the remote history was rewritten (force-push); the audit log and claim_seq numbers on the old line are gone; verify the new history by hand before trusting it\nSTOP: verify the new history by hand before trusting it. Branch protection's 'block force pushes' is the repo-level answer; this check is the detector, not the prevention.\n\nASSERT OK: failed as expected",
+          "output": "SYNC CHECK: FAIL — recorded main SHA f8c16172e209ae3eeb90f4f93f5a523d56663c4f is NOT an ancestor of origin/main — the remote history was rewritten (force-push); the audit log and claim_seq numbers on the old line are gone; verify the new history by hand before trusting it\nSTOP: verify the new history by hand before trusting it. Branch protection's 'block force pushes' is the repo-level answer; this check is the detector, not the prevention.\n\nASSERT OK: failed as expected",
           "note": "Kasus langka §8: force-push mendaur ulang claim_seq dan menghapus log audit — detectornya di sini."
         },
         {
@@ -2835,7 +2844,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "recorded: eb579bb0 | origin/main now: 5552b268\nASSERT OK: bukti rewrite selamat — SHA lama masih tercatat",
+          "output": "recorded: f8c16172 | origin/main now: 35c0d0ba\nASSERT OK: bukti rewrite selamat — SHA lama masih tercatat",
           "note": "Run yang gagal tidak boleh menimpa bukti — kalau tidak, rewrite berikutnya tidak terdeteksi."
         },
         {
@@ -2853,7 +2862,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "SYNC CHECK: note — recorded main SHA eb579bb0 is an ancestor of origin/main\nSYNC CHECK: note — recorded last-known-main-SHA 7ed000d0 in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
+          "output": "SYNC CHECK: note — recorded main SHA f8c16172 is an ancestor of origin/main\nSYNC CHECK: note — recorded last-known-main-SHA de02c5d2 in team/config.json (commit it with your next change)\nSYNC CHECK: OK — local matches the remote. Safe to push.",
           "note": ""
         },
         {
@@ -2898,7 +2907,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1004: heartbeat_at 2026-11-15T13:29:27Z is more than 15 minutes in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim\n\nASSERT OK: failed as expected",
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1004: heartbeat_at 2026-11-21T20:57:05Z is more than 15 minutes in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim\n\nASSERT OK: failed as expected",
           "note": "Toleransi 15 menit (grace_minutes) — lewat dari itu, jamnya yang salah."
         },
         {
@@ -2907,7 +2916,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "VALIDATE: FAIL — do not push until this is fixed:\n  - claim t-1004: heartbeat_at 2026-11-15T13:29:27Z is more than 15 minutes in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim\n\nASSERT OK: failed as expected",
+          "output": "VALIDATE: FAIL — do not push until this is fixed:\n  - claim t-1004: heartbeat_at 2026-11-21T20:57:05Z is more than 15 minutes in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim\n\nASSERT OK: failed as expected",
           "note": "Dua gate membaca timestamp yang sama."
         },
         {
@@ -2925,7 +2934,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1004: started_at 2026-11-15T13:29:28Z is more than 15 minutes in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim\n  - t-1004: expires_at 2026-11-15T12:29:27Z is before started_at 2026-11-15T13:29:28Z — impossible; the claim's timestamps contradict each other\n  - t-1004: heartbeat_at 2026-11-15T10:29:28Z is before started_at 2026-11-15T13:29:28Z — impossible; a heartbeat cannot predate the claim\n\nASSERT OK: failed as expected",
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1004: started_at 2026-11-21T20:57:05Z is more than 15 minutes in the future — a skewed clock wrote this claim; fix the clock (NTP) and re-claim\n  - t-1004: expires_at 2026-11-21T19:57:05Z is before started_at 2026-11-21T20:57:05Z — impossible; the claim's timestamps contradict each other\n  - t-1004: heartbeat_at 2026-11-21T17:57:05Z is before started_at 2026-11-21T20:57:05Z — impossible; a heartbeat cannot predate the claim\n\nASSERT OK: failed as expected",
           "note": "Klaim tidak mungkin dimulai sebelum ditulis."
         },
         {
@@ -2943,7 +2952,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1004: expires_at 2026-11-15T09:29:28Z is before started_at 2026-11-15T10:29:28Z — impossible; the claim's timestamps contradict each other\n\nASSERT OK: failed as expected",
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1004: expires_at 2026-11-21T16:57:05Z is before started_at 2026-11-21T17:57:05Z — impossible; the claim's timestamps contradict each other\n\nASSERT OK: failed as expected",
           "note": "Klaim yang kedaluwarsa sebelum dimulai adalah kontradiksi."
         },
         {
@@ -2988,7 +2997,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-15T10:29:28Z). Commit + push it so the reader sees it.",
+          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-21T17:57:06Z). Commit + push it so the reader sees it.",
           "note": ""
         },
         {
@@ -3024,7 +3033,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-15T10:29:29Z). Commit + push it so the reader sees it.",
+          "output": "MAILBOX: signed line from owner to owner appended to team/mailbox/owner.jsonl (ts 2026-11-21T17:57:06Z). Commit + push it so the reader sees it.",
           "note": ""
         },
         {
@@ -3069,7 +3078,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1007: claims may not cover team/ paths ('team/roster/owner.json') — the board cannot be claimed; claim the work files, not the roster/ledger itself\n\nASSERT OK: failed as expected",
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1007: claims may not cover team/ paths ('team/roster/owner.json') — the board cannot be claimed; claim the work files, not the roster/ledger itself\n  - CONFLICT: created_seq 1 is shared by t-1001, t-1007 — two claims cannot be created at the same position; release one active duplicate (t-1001, t-1007) and re-claim it (re-claim recomputes max+1)\n\nASSERT OK: failed as expected",
           "note": "Penolakan di claim time saja tidak cukup — record lama/buatan tangan juga harus tertangkap."
         },
         {
@@ -3078,7 +3087,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "VALIDATE: FAIL — do not push until this is fixed:\n  - claim t-1007: claims may not cover team/ paths ('team/roster/owner.json') — the board cannot be claimed; claim the work files, not the roster/ledger itself\n\nASSERT OK: failed as expected",
+          "output": "VALIDATE: FAIL — do not push until this is fixed:\n  - claim t-1007: claims may not cover team/ paths ('team/roster/owner.json') — the board cannot be claimed; claim the work files, not the roster/ledger itself\n  - CONFLICT: created_seq 1 is shared by t-1001, t-1007 — two claims cannot be created at the same position; release one active duplicate (t-1001, t-1007) and re-claim it (re-claim recomputes max+1)\n\nASSERT OK: failed as expected",
           "note": "Dua gate membaca record yang sama."
         },
         {
@@ -3319,7 +3328,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-101-a claimed by assistant for 2h — files: src/checkout.py — worktree ../wt-101-a [wt/t-101-a]\nCommit trailer to use on every commit touching these files: [claim #1]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-101-a wt/t-101-a 5b270a4b8e7b1b6ec6ac50453f74e36a7c48ff59\nFANOUT: member t-101-a added to t-101 (1/3 members).",
+          "output": "CLAIM: OK — t-101-a claimed by assistant for 2h — files: src/checkout.py — worktree ../wt-101-a [wt/t-101-a]\nCommit trailer to use on every commit touching these files: [claim #1]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-101-a wt/t-101-a bdc832e7e25f45438455255e2ef7ffcf32d76e05\nFANOUT: member t-101-a added to t-101 (1/3 members).",
           "note": "Member adalah klaim biasa (claim.py claim --fanout-group) + entri di grup — satu code path."
         },
         {
@@ -3346,7 +3355,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101-a (assistant, until 2026-11-15T12:29:31Z): src/checkout.py\nPick other work, or wait until their claim expires / is released.\n\nASSERT OK: failed as expected",
+          "output": "CLAIM: FAIL — someone else is already working on this:\n  - t-101-a (assistant, until 2026-11-21T19:57:08Z): src/checkout.py\nPick other work, or wait until their claim expires / is released.\n\nASSERT OK: failed as expected",
           "note": "Aturan v2.3 tidak memberi pengecualian untuk fan-out: member di file yang sama WAJIB worktree."
         },
         {
@@ -3355,7 +3364,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-101-b claimed by teammate-1 for 2h — files: src/checkout.py — worktree ../wt-101-b [wt/t-101-b]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-101-b wt/t-101-b 875166a1834a6cf7b26e89fa0beffe04e6d59bcd\nFANOUT: member t-101-b added to t-101 (2/3 members).",
+          "output": "CLAIM: OK — t-101-b claimed by teammate-1 for 2h — files: src/checkout.py — worktree ../wt-101-b [wt/t-101-b]\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-101-b wt/t-101-b 1e8cff53a552417d6a372f7ca5966b723bdd993d\nFANOUT: member t-101-b added to t-101 (2/3 members).",
           "note": ""
         },
         {
@@ -3382,7 +3391,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "CLAIM: OK — t-101-c claimed by owner for 2h — files: src/checkout.py — worktree ../wt-101-c [wt/t-101-c]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-101-c wt/t-101-c db6f277a17b8ac042b61bcd2c9198c0b3bfa6c88\nFANOUT: member t-101-c added to t-101 (3/3 members).",
+          "output": "CLAIM: OK — t-101-c claimed by owner for 2h — files: src/checkout.py — worktree ../wt-101-c [wt/t-101-c]\nCommit trailer to use on every commit touching these files: [claim #3]\nRemember: commit + push the claim file ALONE first, before any work commits.\nThen create the worktree: bash scripts/worktree_setup.sh ../wt-101-c wt/t-101-c d7b98768ac616d09e9ea1d57660bf9d83eab7d29\nFANOUT: member t-101-c added to t-101 (3/3 members).",
           "note": ""
         },
         {
@@ -3441,11 +3450,11 @@
         },
         {
           "label": "[main] A15A: worktree_setup.sh membuat worktree t-101-a",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-101-a wt/t-101-a 5b270a4b8e7b1b6ec6ac50453f74e36a7c48ff59",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-101-a wt/t-101-a bdc832e7e25f45438455255e2ef7ffcf32d76e05",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at 5b270a4 fanout: create t-101\nworktree_setup: OK — worktree /tmp/sim-work/s11-orca-features/wt-101-a on branch wt/t-101-a (base 5b270a4b8e7b1b6ec6ac50453f74e36a7c48ff59)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s11-orca-features/wt-101-a\nPreparing worktree (new branch 'wt/t-101-a')",
+          "output": "HEAD is now at bdc832e fanout: create t-101\nworktree_setup: OK — worktree /tmp/sim-work/s11-orca-features/wt-101-a on branch wt/t-101-a (base bdc832e7e25f45438455255e2ef7ffcf32d76e05)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s11-orca-features/wt-101-a\nPreparing worktree (new branch 'wt/t-101-a')",
           "note": ""
         },
         {
@@ -3468,11 +3477,11 @@
         },
         {
           "label": "[main] A15B: worktree_setup.sh membuat worktree t-101-b",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-101-b wt/t-101-b 875166a1834a6cf7b26e89fa0beffe04e6d59bcd",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-101-b wt/t-101-b 1e8cff53a552417d6a372f7ca5966b723bdd993d",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at 875166a fanout: t-101 member t-101-a\nworktree_setup: OK — worktree /tmp/sim-work/s11-orca-features/wt-101-b on branch wt/t-101-b (base 875166a1834a6cf7b26e89fa0beffe04e6d59bcd)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s11-orca-features/wt-101-b\nPreparing worktree (new branch 'wt/t-101-b')",
+          "output": "HEAD is now at 1e8cff5 fanout: t-101 member t-101-a\nworktree_setup: OK — worktree /tmp/sim-work/s11-orca-features/wt-101-b on branch wt/t-101-b (base 1e8cff53a552417d6a372f7ca5966b723bdd993d)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s11-orca-features/wt-101-b\nPreparing worktree (new branch 'wt/t-101-b')",
           "note": ""
         },
         {
@@ -3495,11 +3504,11 @@
         },
         {
           "label": "[main] A15C: worktree_setup.sh membuat worktree t-101-c",
-          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-101-c wt/t-101-c db6f277a17b8ac042b61bcd2c9198c0b3bfa6c88",
+          "cmd": "bash /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/worktree_setup.sh ../wt-101-c wt/t-101-c d7b98768ac616d09e9ea1d57660bf9d83eab7d29",
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "HEAD is now at db6f277 fanout: t-101 member t-101-b\nworktree_setup: OK — worktree /tmp/sim-work/s11-orca-features/wt-101-c on branch wt/t-101-c (base db6f277a17b8ac042b61bcd2c9198c0b3bfa6c88)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s11-orca-features/wt-101-c\nPreparing worktree (new branch 'wt/t-101-c')",
+          "output": "HEAD is now at d7b9876 fanout: t-101 member t-101-b\nworktree_setup: OK — worktree /tmp/sim-work/s11-orca-features/wt-101-c on branch wt/t-101-c (base d7b98768ac616d09e9ea1d57660bf9d83eab7d29)\n  Remember: the claim itself must be pushed to main ALONE first, before any work commits.\n  Before pushing this branch: python3 scripts/sync_check.py team/features team/claims --claim <task-id>\n  After the merge: git worktree remove /tmp/sim-work/s11-orca-features/wt-101-c\nPreparing worktree (new branch 'wt/t-101-c')",
           "note": ""
         },
         {
@@ -3967,7 +3976,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "MAILBOX: signed line from teammate-1 to assistant appended to team/mailbox/assistant.jsonl (ts 2026-11-15T10:29:36Z). Commit + push it so the reader sees it.\nREVIEWS: created r-201 [approve] on claim t-201 by teammate-1.\nDelivered to assistant's mailbox (team/mailbox/assistant.jsonl). Commit + push the review file AND the mailbox file.",
+          "output": "MAILBOX: signed line from teammate-1 to assistant appended to team/mailbox/assistant.jsonl (ts 2026-11-21T17:57:13Z). Commit + push it so the reader sees it.\nREVIEWS: created r-201 [approve] on claim t-201 by teammate-1.\nDelivered to assistant's mailbox (team/mailbox/assistant.jsonl). Commit + push the review file AND the mailbox file.",
           "note": "Review dibuat di §B karena resolve --review butuh review yang sudah ada. Reviewer human + require_signatures on → delivery line ditandatangani (--key)."
         },
         {
@@ -4048,7 +4057,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "MAILBOX: signed line from owner to assistant appended to team/mailbox/assistant.jsonl (ts 2026-11-15T10:29:36Z). Commit + push it so the reader sees it.\nREVIEWS: created r-202 [request-changes] on claim t-201 by owner.\nDelivered to assistant's mailbox (team/mailbox/assistant.jsonl). Commit + push the review file AND the mailbox file.",
+          "output": "MAILBOX: signed line from owner to assistant appended to team/mailbox/assistant.jsonl (ts 2026-11-21T17:57:13Z). Commit + push it so the reader sees it.\nREVIEWS: created r-202 [request-changes] on claim t-201 by owner.\nDelivered to assistant's mailbox (team/mailbox/assistant.jsonl). Commit + push the review file AND the mailbox file.",
           "note": ""
         },
         {
@@ -4327,7 +4336,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "{\n  \"claim_seq\": 999,\n  \"done_at\": \"2026-11-15T10:29:38Z\",\n  \"done_by\": \"assistant\",\n  \"files_modified\": [\n    \"src/forge.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"\",\n  \"summary\": \"Done cleanly.\",\n  \"task_id\": \"t-304\"\n}\n",
+          "output": "{\n  \"claim_seq\": 999,\n  \"done_at\": \"2026-11-21T17:57:15Z\",\n  \"done_by\": \"assistant\",\n  \"files_modified\": [\n    \"src/forge.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"\",\n  \"summary\": \"Done cleanly.\",\n  \"task_id\": \"t-304\"\n}\n",
           "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
         },
         {
@@ -4345,7 +4354,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "{\n  \"claim_seq\": 1,\n  \"done_at\": \"2026-11-15T10:29:38Z\",\n  \"done_by\": \"assistant\",\n  \"files_modified\": [\n    \"src/forge.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"\",\n  \"summary\": \"Done cleanly.\",\n  \"task_id\": \"t-304\"\n}\n",
+          "output": "{\n  \"claim_seq\": 1,\n  \"done_at\": \"2026-11-21T17:57:15Z\",\n  \"done_by\": \"assistant\",\n  \"files_modified\": [\n    \"src/forge.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"\",\n  \"summary\": \"Done cleanly.\",\n  \"task_id\": \"t-304\"\n}\n",
           "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
         },
         {
@@ -4363,7 +4372,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "{\n  \"claim_seq\": 1,\n  \"done_at\": \"2026-11-15T10:29:37Z\",\n  \"done_by\": \"owner\",\n  \"files_modified\": [\n    \"src/receipt.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"-----BEGIN SSH SIGNATURE-----\\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgnNPaugcqXUt/Z+bceytvsgoETt\\naOCh+Qu5cZIOZcfR0AAAARdGhlcm9zdGVyLXJlY2VpcHQAAAAAAAAABnNoYTUxMgAAAFMA\\nAAALc3NoLWVkMjU1MTkAAABAaE",
+          "output": "{\n  \"claim_seq\": 1,\n  \"done_at\": \"2026-11-21T17:57:14Z\",\n  \"done_by\": \"owner\",\n  \"files_modified\": [\n    \"src/receipt.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"-----BEGIN SSH SIGNATURE-----\\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAglKpf+pgOZWj67yERQSZZF2rcD5\\nKCW5ywtWsVswRclyoAAAARdGhlcm9zdGVyLXJlY2VpcHQAAAAAAAAABnNoYTUxMgAAAFMA\\nAAALc3NoLWVkMjU1MTkAAABAti",
           "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
         },
         {
@@ -4381,7 +4390,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "{\n  \"claim_seq\": 1,\n  \"done_at\": \"2026-11-15T10:29:37Z\",\n  \"done_by\": \"owner\",\n  \"files_modified\": [\n    \"src/receipt.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"-----BEGIN SSH SIGNATURE-----\\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgnNPaugcqXUt/Z+bceytvsgoETt\\naOCh+Qu5cZIOZcfR0AAAARdGhlcm9zdGVyLXJlY2VpcHQAAAAAAAAABnNoYTUxMgAAAFMA\\nAAALc3NoLWVkMjU1MTkAAABAaE",
+          "output": "{\n  \"claim_seq\": 1,\n  \"done_at\": \"2026-11-21T17:57:14Z\",\n  \"done_by\": \"owner\",\n  \"files_modified\": [\n    \"src/receipt.py\"\n  ],\n  \"follow_ups\": [],\n  \"lamport\": 1,\n  \"outcome\": \"succeeded\",\n  \"sig\": \"-----BEGIN SSH SIGNATURE-----\\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAglKpf+pgOZWj67yERQSZZF2rcD5\\nKCW5ywtWsVswRclyoAAAARdGhlcm9zdGVyLXJlY2VpcHQAAAAAAAAABnNoYTUxMgAAAFMA\\nAAALc3NoLWVkMjU1MTkAAABAti",
           "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
         },
         {
@@ -4426,7 +4435,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "MAILBOX: signed line from teammate-1 to assistant appended to team/mailbox/assistant.jsonl (ts 2026-11-15T10:29:38Z). Commit + push it so the reader sees it.\nREVIEWS: created r-203 [approve] on claim t-201 by teammate-1.\nDelivered to assistant's mailbox (team/mailbox/assistant.jsonl). Commit + push the review file AND the mailbox file.",
+          "output": "MAILBOX: signed line from teammate-1 to assistant appended to team/mailbox/assistant.jsonl (ts 2026-11-21T17:57:16Z). Commit + push it so the reader sees it.\nREVIEWS: created r-203 [approve] on claim t-201 by teammate-1.\nDelivered to assistant's mailbox (team/mailbox/assistant.jsonl). Commit + push the review file AND the mailbox file.",
           "note": "Approve yang lebih baru membersihkan request-changes (latest by created_at, id)."
         },
         {
@@ -4606,7 +4615,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "doctor: python3 3.12.3 OK\ndoctor: git repo OK (/tmp/sim-work/s11-orca-features/work-main)\ndoctor: team/roster/ OK\ndoctor: team/claims/ OK\ndoctor: team/features/ OK\ndoctor: skill_version 2.6.0 matches SKILL.md OK\ndoctor: all scripts in /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts compile OK\ndoctor: CI mode — local pre-push hook check skipped (no local hook in CI)\ndoctor: worktree_mode=per-claim — checking worktree support\ndoctor: git 2.43.0 supports merge-tree OK\ndoctor: worktree_setup.sh present OK\ndoctor: require_signatures=true — checking signature support\ndoctor: ssh-keygen present OK\ndoctor: every active roster member has a public_key OK\nFANOUT CHECK: OK — fan-out group records valid.\nGATES CHECK: OK — gate records valid.\nRECEIPTS CHECK: OK — receipt records valid.\nREVIEWS CHECK: OK — review records valid.\nDOCTOR: OK — healthy. You may start work (load the roster first).",
+          "output": "doctor: python3 3.12.3 OK\ndoctor: git repo OK (/tmp/sim-work/s11-orca-features/work-main)\ndoctor: team/roster/ OK\ndoctor: team/claims/ OK\ndoctor: team/features/ OK\ndoctor: skill_version 2.7.0 matches SKILL.md OK\ndoctor: all scripts in /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts compile OK\ndoctor: CI mode — local pre-push hook check skipped (no local hook in CI)\ndoctor: worktree_mode=per-claim — checking worktree support\ndoctor: git 2.43.0 supports merge-tree OK\ndoctor: worktree_setup.sh present OK\ndoctor: require_signatures=true — checking signature support\ndoctor: ssh-keygen present OK\ndoctor: every active roster member has a public_key OK\nFANOUT CHECK: OK — fan-out group records valid.\nGATES CHECK: OK — gate records valid.\nRECEIPTS CHECK: OK — receipt records valid.\nREVIEWS CHECK: OK — review records valid.\nDOCTOR: OK — healthy. You may start work (load the roster first).",
           "note": "Doctor gagal kalau satu pun dari fanout/gates/receipts/reviews check gagal."
         },
         {
@@ -4615,7 +4624,7 @@
           "exit": 0,
           "expected": "pass",
           "gate_ok": true,
-          "output": "FANOUT: 2 group(s):\n  - t-101 [decided] — Fix the checkout race (3 member(s), 3 settled, by owner — winner: t-101-a)\n  - t-102 [cancelled] — Spike: cache layer (1 member(s), 1 settled, by owner)\nGATES: 4 gate(s):\n  - g-201 [resolved] — Is the new checkout API approved? (blocks prd prd-001, by owner -> yes)\n  - g-202 [waived] — Is the timeout handling acceptable? (blocks claim t-201, by owner)\n  - g-203 [resolved] — Is the API surface final? (blocks claim t-201, by owner -> yes)\n  - g-204 [waived] — Is the error path covered? (blocks claim t-201, by owner)\nRECEIPTS: 8 receipt(s):\n  - t-101-a [claim #1] succeeded — assistant at 2026-11-15T10:29:32Z — Race fixed with a per-cart lock; test covers the timeout.\n  - t-101-b [claim #2] failed — teammate-1 at 2026-11-15T10:29:32Z — Approach dead-ends on the timeout; retry amplifies it.\n  - t-101-c [claim #3] succeeded — owner at 2026-11-15T10:29:33Z — Race fixed via a queue; slower but correct.\n  - t-201 [claim #1] succeeded — assistant at 2026-11-15T10:29:39Z — Checkout done; timeout case tested.\n  - t-301 [claim #1] succeeded — owner at 2026-11-15T10:29:37Z — Filed on behalf of assistant.\n  - t-303 [claim #1] failed — assistant at 2026-11",
+          "output": "FANOUT: 2 group(s):\n  - t-101 [decided] — Fix the checkout race (3 member(s), 3 settled, by owner — winner: t-101-a)\n  - t-102 [cancelled] — Spike: cache layer (1 member(s), 1 settled, by owner)\nGATES: 4 gate(s):\n  - g-201 [resolved] — Is the new checkout API approved? (blocks prd prd-001, by owner -> yes)\n  - g-202 [waived] — Is the timeout handling acceptable? (blocks claim t-201, by owner)\n  - g-203 [resolved] — Is the API surface final? (blocks claim t-201, by owner -> yes)\n  - g-204 [waived] — Is the error path covered? (blocks claim t-201, by owner)\nRECEIPTS: 8 receipt(s):\n  - t-101-a [claim #1] succeeded — assistant at 2026-11-21T17:57:10Z — Race fixed with a per-cart lock; test covers the timeout.\n  - t-101-b [claim #2] failed — teammate-1 at 2026-11-21T17:57:10Z — Approach dead-ends on the timeout; retry amplifies it.\n  - t-101-c [claim #3] succeeded — owner at 2026-11-21T17:57:10Z — Race fixed via a queue; slower but correct.\n  - t-201 [claim #1] succeeded — assistant at 2026-11-21T17:57:17Z — Checkout done; timeout case tested.\n  - t-301 [claim #1] succeeded — owner at 2026-11-21T17:57:14Z — Filed on behalf of assistant.\n  - t-303 [claim #1] failed — assistant at 2026-11",
           "note": ""
         },
         {
@@ -4740,12 +4749,463 @@
           }
         }
       }
+    },
+    {
+      "id": "s12",
+      "title": "Tutup lubang v2.7.0: behind-skew, created_seq ganda, line citation",
+      "team": "Tim bangun website (3 AI + owner)",
+      "story": "Tiga lubang yang dibiarkan terbuka di v2.6.0: jam yang ketinggalan tidak terdeteksi (hanya arah maju yang tertangkap), dua klaim bisa berbagi created_seq yang sama tanpa ada yang protes, dan entry registry hanya membuktikan simbol ada di file — bukan di baris yang dikutip. v2.7.0 menutup ketiganya dengan sinyal yang sudah ada di record: timestamp base commit, created_seq itu sendiri, dan nomor baris definisi.",
+      "tanpa_roster": "Klaim dari jam yang 3 jam ketinggalan terlihat persis seperti klaim yang memang kedaluwarsa; dua klaim 'dulu' yang sama membuat urutan tidak terdefinisi; registry menunjuk ke baris yang salah dan tetap hijau.",
+      "steps": [
+        {
+          "label": "[A1] Klaim normal t-1201 (assistant, tests/test_login.py)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-1201 --title Kerja normal --owner assistant --files tests/test_login.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-1201 claimed by assistant for 2h — files: tests/test_login.py\nCommit trailer to use on every commit touching these files: [claim #2]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": "t-001 starter sudah kedaluwarsa (stealable), jadi file ini bebas diklaim."
+        },
+        {
+          "label": "[A2] Record t-1201 membawa created_base_commit == HEAD == base_commit",
+          "cmd": "python3 -c import json\nc = json.load(open('team/claims/t-1201.json'))\nassert c['created_base_commit'] == 'de8242726fd00f9592d8679bc0f096b309e25dcb', c\nassert c['created_base_commit'] == c['base_commit']\nprint('ASSERT OK: created_base_commit recorded once at claim time')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "ASSERT OK: created_base_commit recorded once at claim time",
+          "note": "Field baru v2.7: base pembuatan yang immutable — jangkar gate behind-skew."
+        },
+        {
+          "label": "[A3] claim.py check LOLOS untuk klaim normal",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: OK — 2 claim(s), 1 blocking, no conflicts.",
+          "note": "started_at ~= base commit timestamp — tidak ada skew."
+        },
+        {
+          "label": "[A4] Tulis klaim t-1202 dengan started_at 3 jam SEBELUM base commit",
+          "cmd": "python3 -c import json\nc = json.load(open('team/claims/t-1201.json'))\nc.update({'task_id': 't-1202', 'task': 'Kerja t-1202', 'owner_id': 'assistant', 'files': ['src/profile.py'], 'started_at': '2026-11-21T14:57:19Z', 'heartbeat_at': '2026-11-21T14:57:19Z', 'expires_at': '2026-11-21T16:57:19Z', 'created_seq': 42, 'claim_seq': 42})\njson.dump(c, open('team/claims/t-1202.json', 'w'), indent=2, sort_keys=True)\nprint('forged t-1202')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "forged t-1202",
+          "note": "Model setia klaim dari agent yang jamnya ketinggalan 3 jam: started_at, heartbeat, DAN expires ikut mundur — bukan cuma dua yang terakhir."
+        },
+        {
+          "label": "[A5] claim.py check HARUS GAGAL — behind-skew",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py', 'check', 'team/claims', '--roster', 'team/roster'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'minutes BEFORE its creation base' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\n  ! t-1202: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - t-1202: started_at 2026-11-21T14:57:19Z is more than 15 minutes BEFORE its creation base de8242726fd00f9592d8679bc0f096b309e25dcb (2026-11-21T17:57:19Z) — impossible: a claim cannot be created before the commit it is based on exists. The claim author's clock runs behind; fix the clock (NTP), release this claim and re-claim (if the BASE author's clock was fast instead, this is a transient false FAIL — release + re-claim once time has passed the base timestamp)\n\nASSERT OK: failed as expected",
+          "note": "Klaim tidak mungkin dibuat sebelum commit yang jadi base-nya ada; jam penulis klaim ketinggalan >15 menit."
+        },
+        {
+          "label": "[A6] validate.py HARUS GAGAL — behind-skew yang sama",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py', 'team'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'minutes BEFORE its creation base' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - claim t-1202: started_at 2026-11-21T14:57:19Z is more than 15 minutes BEFORE its creation base de8242726fd00f9592d8679bc0f096b309e25dcb (2026-11-21T17:57:19Z) — impossible: a claim cannot be created before the commit it is based on exists. The claim author's clock runs behind; fix the clock (NTP), release this claim and re-claim (if the BASE author's clock was fast instead, this is a transient false FAIL — release + re-claim once time has passed the base timestamp)\n\nASSERT OK: failed as expected",
+          "note": "Dua gate independen membaca timestamp yang sama."
+        },
+        {
+          "label": "[A7] Perbaiki t-1202 dengan cara yang didokumentasikan: release + re-claim id yang sama",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --claims-dir team/claims --task t-1202 --by assistant",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-1202 -> released. Commit + push the claim file.",
+          "note": ""
+        },
+        {
+          "label": "[A7b] Re-claim t-1202 (record segar menimpa record skew)",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py claim --claims-dir team/claims --roster team/roster --config team/config.json --task t-1202 --title Kerja skew (ulang) --owner assistant --files src/profile.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: OK — t-1202 claimed by assistant for 2h — files: src/profile.py\nCommit trailer to use on every commit touching these files: [claim #43]\nRemember: commit + push the claim file ALONE first, before any work commits.",
+          "note": "Re-claim id yang sama menimpa record lama — jejak audit tetap di events.jsonl."
+        },
+        {
+          "label": "[A7c] claim.py check LOLOS lagi — papan tidak brick",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\nCLAIM CHECK: OK — 3 claim(s), 2 blocking, no conflicts.",
+          "note": ""
+        },
+        {
+          "label": "[A8] Tulis klaim t-1204 TANPA base (klaim lama / pre-v2.7) dengan started_at -3 jam",
+          "cmd": "python3 -c import json\nc = json.load(open('team/claims/t-1201.json'))\nc.update({'task_id': 't-1204', 'task': 'Kerja t-1204', 'owner_id': 'teammate-1', 'files': ['src/other.py'], 'started_at': '2026-11-21T14:57:19Z', 'heartbeat_at': '2026-11-21T14:57:19Z', 'expires_at': '2026-11-21T16:57:19Z', 'created_seq': 100, 'claim_seq': 100})\nc.pop('created_base_commit', None); c.pop('base_commit', None)\njson.dump(c, open('team/claims/t-1204.json', 'w'), indent=2, sort_keys=True)\nprint('forged t-1204')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "forged t-1204",
+          "note": "Tidak ada sinyal base = tidak ada vonis — gate skip, bukan fail."
+        },
+        {
+          "label": "[A8b] claim.py check LOLOS — klaim tanpa base tidak false-FAIL",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\n  ! t-1204: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\nCLAIM CHECK: OK — 4 claim(s), 2 blocking, no conflicts.",
+          "note": "Hanya warning stealable (expired+stale) — itu perilaku lama, bukan gate baru."
+        },
+        {
+          "label": "[A9] Tulis klaim t-1205 dengan started_at 10 menit sebelum base (di dalam grace 15 menit)",
+          "cmd": "python3 -c import json\nc = json.load(open('team/claims/t-1201.json'))\nc.update({'task_id': 't-1205', 'task': 'Kerja t-1205', 'owner_id': 'owner', 'files': ['src/grace.py'], 'started_at': '2026-11-21T17:47:19Z', 'heartbeat_at': '2026-11-21T17:57:20Z', 'expires_at': '2026-11-21T19:57:20Z', 'created_seq': 101, 'claim_seq': 101})\njson.dump(c, open('team/claims/t-1205.json', 'w'), indent=2, sort_keys=True)\nprint('forged t-1205')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "forged t-1205",
+          "note": "Grace bukan hair-trigger: selisih 10 menit masih lolos."
+        },
+        {
+          "label": "[A9b] claim.py check LOLOS — di dalam grace tidak di-FAIL",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\n  ! t-1204: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\nCLAIM CHECK: OK — 5 claim(s), 3 blocking, no conflicts.",
+          "note": ""
+        },
+        {
+          "label": "[B1] Tulis klaim t-1206 dengan created_seq 77",
+          "cmd": "python3 -c import json\nc = json.load(open('team/claims/t-1201.json'))\nc.update({'task_id': 't-1206', 'task': 'Kerja t-1206', 'owner_id': 'teammate-1', 'files': ['src/dup_a.py'], 'started_at': '2026-11-21T17:57:20Z', 'heartbeat_at': '2026-11-21T17:57:20Z', 'expires_at': '2026-11-21T19:57:20Z', 'created_seq': 77, 'claim_seq': 77})\njson.dump(c, open('team/claims/t-1206.json', 'w'), indent=2, sort_keys=True)\nprint('forged t-1206')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "forged t-1206",
+          "note": "Dua file berbeda — satu-satunya yang salah di sini adalah seq-nya."
+        },
+        {
+          "label": "[B2] Tulis klaim t-1207 dengan created_seq 77 JUGA (race: dua agent baca max yang sama)",
+          "cmd": "python3 -c import json\nc = json.load(open('team/claims/t-1201.json'))\nc.update({'task_id': 't-1207', 'task': 'Kerja t-1207', 'owner_id': 'owner', 'files': ['src/dup_b.py'], 'started_at': '2026-11-21T17:57:20Z', 'heartbeat_at': '2026-11-21T17:57:20Z', 'expires_at': '2026-11-21T19:57:20Z', 'created_seq': 77, 'claim_seq': 78})\njson.dump(c, open('team/claims/t-1207.json', 'w'), indent=2, sort_keys=True)\nprint('forged t-1207')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "forged t-1207",
+          "note": ""
+        },
+        {
+          "label": "[B3] claim.py check HARUS GAGAL — created_seq ganda",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py', 'check', 'team/claims', '--roster', 'team/roster'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'created_seq 77 is shared by t-1206, t-1207' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\n  ! t-1204: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\nCLAIM CHECK: FAIL — do not push until this is fixed:\n  - CONFLICT: created_seq 77 is shared by t-1206, t-1207 — two claims cannot be created at the same position; release one active duplicate (t-1206, t-1207) and re-claim it (re-claim recomputes max+1)\n\nASSERT OK: failed as expected",
+          "note": "Dua klaim tidak bisa dibuat di posisi yang sama — 'siapa duluan' tidak terdefinisi."
+        },
+        {
+          "label": "[B4] validate.py HARUS GAGAL — created_seq ganda yang sama",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py', 'team'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'created_seq 77 is shared by t-1206, t-1207' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: FAIL — do not push until this is fixed:\n  - CONFLICT: created_seq 77 is shared by t-1206, t-1207 — two claims cannot be created at the same position; release one active duplicate (t-1206, t-1207) and re-claim it (re-claim recomputes max+1)\n\nASSERT OK: failed as expected",
+          "note": ""
+        },
+        {
+          "label": "[B5] Lepas satu duplikat (t-1207) — yang tersisa hanya satu yang aktif",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py release --claims-dir team/claims --task t-1207 --by owner",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "CLAIM: t-1207 -> released. Commit + push the claim file.",
+          "note": ""
+        },
+        {
+          "label": "[B5b] claim.py check LOLOS — duplikat yang sudah released adalah sejarah mati",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/claim.py check team/claims --roster team/roster",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! t-001: past max lifetime of 24h — the claim is dead no matter how fresh the heartbeat is; release it and re-claim as a new task\n  ! t-1204: stealable — expired + heartbeat stale for 30+ min; anyone may re-claim these files\nCLAIM CHECK: OK — 7 claim(s), 4 blocking, no conflicts.",
+          "note": "Gate hanya FAIL kalau ada duplikat yang aktif — me-FAIL-kan sejarah tidak punya jalan keluar."
+        },
+        {
+          "label": "[C0] Tulis src/greet.py (greet baris 1, greet2 baris 5)",
+          "cmd": "write src/greet.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "def greet(name):\n    return \"hi \" + name\n\n\ndef greet2(name):\n    return \"hello \" + name\n",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "[C1] Register tanpa #line HARUS DITOLAK",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py', 'register', '--features-dir', 'team/features', '--id', 'no-line-api', '--name', 'No Line', '--does', 'Tanpa kutipan baris', '--entry', 'src/greet.py:greet', '--owner', 'assistant', '--files', 'src/greet.py', '--keywords', 'greet', '--breaking', 'false'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'must cite its definition line' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: FAIL — code entry must cite its definition line: file:function#line (e.g. src/auth/login.py:login#14) — the line is where the symbol is defined\n\nASSERT OK: failed as expected",
+          "note": "Entry code baru wajib membawa #line — tanpa itu registry tidak bisa membuktikan simbol ada di baris yang dikutip."
+        },
+        {
+          "label": "[C2] Register dengan #line yang SALAH (greet di baris 1, dikutip 99) HARUS DITOLAK",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py', 'register', '--features-dir', 'team/features', '--id', 'wrong-line-api', '--name', 'Wrong Line', '--does', 'Baris salah', '--entry', 'src/greet.py:greet#99', '--owner', 'assistant', '--files', 'src/greet.py', '--keywords', 'greet', '--breaking', 'false'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'not at the cited line 99' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: FAIL — entry invalid: symbol 'greet' is defined at line 1 in ./src/greet.py, not at the cited line 99 — the entry points at the wrong line; run features.py reverify to re-pin it\n\nASSERT OK: failed as expected",
+          "note": "Simbol ada di file, tapi tidak di baris yang dikutip — itu tetap entry yang bohong."
+        },
+        {
+          "label": "[C3b] Register greet-api dengan #line yang BENAR",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py register --features-dir team/features --id greet-api --name Greet API --does Menyapa --entry src/greet.py:greet#1 --owner assistant --files src/greet.py --keywords greet sapa --breaking false",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: registered greet-api [experimental] v1.0.0 — entry src/greet.py:greet#1.\nRemember: commit + push the feature file so the next AI can find it.",
+          "note": ""
+        },
+        {
+          "label": "[C4] Improve entry TANPA #line HARUS DITOLAK (walau --bump major sudah benar)",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py', 'improve', '--features-dir', 'team/features', '--id', 'greet-api', '--by', 'assistant', '--bump', 'major', '--entry', 'src/greet.py:greet2', '--note', 'Pindah ke greet2', '--breaking', 'false'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'must cite its definition line' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: FAIL — a changed code entry must cite its definition line: file:function#line (e.g. src/auth/login.py:login#14)\n\nASSERT OK: failed as expected",
+          "note": "Aturan baris berlaku untuk entry yang BERUBAH juga, bukan cuma yang baru."
+        },
+        {
+          "label": "[C4b] Improve entry DENGAN #line yang benar LOLOS",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py improve --features-dir team/features --id greet-api --by assistant --bump major --entry src/greet.py:greet2#5 --note Pindah ke greet2 --breaking false",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: greet-api improved 1.0.0 -> 2.0.0 by assistant (entry: src/greet.py:greet2#5).\nRemember: commit + push the feature file so the next AI builds on this version, not the old one.",
+          "note": "greet-api sekarang v2.0.0, entry src/greet.py:greet2#5."
+        },
+        {
+          "label": "[C5] Tulis record old-api LANGSUNG ke file — entry lama tanpa #line (grandfather)",
+          "cmd": "python3 -c import hashlib, json\nfrom datetime import date, datetime, timezone\ndata = open('src/greet.py', 'rb').read()\nblob = hashlib.sha1(b'blob %d\\0' % len(data) + data).hexdigest()\ntoday = date.today().isoformat()\nrec = {'id': 'old-api', 'name': 'Old API', 'kind': 'code',\n 'does': 'API lama sebelum aturan #line', 'entry': 'src/greet.py:greet',\n 'entry_blob_sha': blob, 'files': ['src/greet.py'], 'keywords': ['greet'],\n 'owner_id': 'assistant', 'contributors': ['assistant'],\n 'status': 'experimental', 'version': '1.0.0', 'breaking': False,\n 'breaking_notes': '', 'canonical': False, 'contract': False,\n 'depends_on': [], 'used_by': [],\n 'changes': [{'version': '1.0.0', 'by': 'assistant', 'note': 'First version', 'date': today}],\n 'last_verified': today, 'status_reason': 'registered as experimental',\n 'status_changed_by': 'assistant',\n 'status_changed_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),\n 'lamport': 1}\njson.dump(rec, open('team/features/old-api.json', 'w'), indent=2, sort_keys=True)\nprint('wrote old-api without a line citation')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "wrote old-api without a line citation",
+          "note": "Entry lama tidak dipaksa mati — grandfather: check hanya warning."
+        },
+        {
+          "label": "[C5b] features.py check LOLOS tapi memberi WARNING 'no line citation'",
+          "cmd": "bash -c python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py check team/features --roster team/roster --repo-root . | grep -q 'no line citation'",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "",
+          "note": "Warning, bukan FAIL — entry lama tetap jalan sampai di-reverify."
+        },
+        {
+          "label": "[C6] Reverify old-api — line ditambahkan",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py reverify --features-dir team/features --id old-api --by assistant",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: old-api re-verified by assistant — entry src/greet.py:greet#1, blob 0672379f459c1072c09e4a7da5139f1a2a7438af\nFEATURES: entry line (re)pinned: src/greet.py:greet -> src/greet.py:greet#1",
+          "note": ""
+        },
+        {
+          "label": "[C6b] Entry old-api sekarang src/greet.py:greet#1",
+          "cmd": "python3 -c import json\nc = json.load(open('team/features/old-api.json'))\nassert c['entry'] == 'src/greet.py:greet#1', c['entry']\nprint('ASSERT OK: reverify pinned the line')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "ASSERT OK: reverify pinned the line",
+          "note": ""
+        },
+        {
+          "label": "[C6c] features.py check LOLOS dan warning 'no line citation' HILANG",
+          "cmd": "bash -c python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py check team/features --roster team/roster --repo-root . | grep -q 'no line citation' && exit 1 || exit 0",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "",
+          "note": ""
+        },
+        {
+          "label": "[C7] Pindah simbol: satu baris komentar di atas greet.py (greet -> baris 2, greet2 -> baris 6)",
+          "cmd": "write src/greet.py",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "# catatan: sapaan\ndef greet(name):\n    return \"hi \" + name\n\n\ndef greet2(name):\n    return \"hello \" + name\n",
+          "note": "AI menulis/mengubah file kerja (aksi kerja, bukan script)"
+        },
+        {
+          "label": "[C7b] features.py check HARUS GAGAL — baris yang dikutip sudah tidak benar",
+          "cmd": "python3 -c import subprocess\np = subprocess.run(['python3', '/home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py', 'check', 'team/features', '--roster', 'team/roster', '--repo-root', '.'], capture_output=True, text=True)\nprint(p.stdout + p.stderr)\nassert p.returncode != 0, 'expected failure, got exit 0'\nassert 'not at the cited line' in p.stdout + p.stderr, 'failure is not the expected one'\nprint('ASSERT OK: failed as expected')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES CHECK: FAIL — do not push until this is fixed:\n  - greet-api: entry invalid: symbol 'greet2' is defined at line 6 in ./src/greet.py, not at the cited line 5 — the entry points at the wrong line; run features.py reverify to re-pin it\n  - old-api: entry invalid: symbol 'greet' is defined at line 2 in ./src/greet.py, not at the cited line 1 — the entry points at the wrong line; run features.py reverify to re-pin it\n\nASSERT OK: failed as expected",
+          "note": "Registry yang menunjuk ke baris salah tidak boleh hijau — dan reverify yang memperbaikinya."
+        },
+        {
+          "label": "[C7c] Reverify old-api — line di-UPDATE ke baris baru",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py reverify --features-dir team/features --id old-api --by assistant",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: old-api re-verified by assistant — entry src/greet.py:greet#2, blob d2505c062386c51be298cff4f28d430d625ad0b1\nFEATURES: entry line (re)pinned: src/greet.py:greet#1 -> src/greet.py:greet#2",
+          "note": ""
+        },
+        {
+          "label": "[C7d] Entry old-api sekarang src/greet.py:greet#2",
+          "cmd": "python3 -c import json\nc = json.load(open('team/features/old-api.json'))\nassert c['entry'] == 'src/greet.py:greet#2', c['entry']\nprint('ASSERT OK: reverify updated the moved line')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "ASSERT OK: reverify updated the moved line",
+          "note": "Pindah baris via reverify BUKAN contract change — kontraknya file:function, baris hanya pointer."
+        },
+        {
+          "label": "[C7e] Reverify greet-api juga — greet2 pindah ke baris 6",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py reverify --features-dir team/features --id greet-api --by assistant",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES: greet-api re-verified by assistant — entry src/greet.py:greet2#6, blob d2505c062386c51be298cff4f28d430d625ad0b1\nFEATURES: entry line (re)pinned: src/greet.py:greet2#5 -> src/greet.py:greet2#6",
+          "note": ""
+        },
+        {
+          "label": "[C7f] Entry greet-api sekarang src/greet.py:greet2#6",
+          "cmd": "python3 -c import json\nc = json.load(open('team/features/greet-api.json'))\nassert c['entry'] == 'src/greet.py:greet2#6', c['entry']\nprint('ASSERT OK: reverify updated the moved line')",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "ASSERT OK: reverify updated the moved line",
+          "note": ""
+        },
+        {
+          "label": "[C7g] features.py check LOLOS — semua line (re)pinned, blob segar",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/features.py check team/features --roster team/roster --repo-root .",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "FEATURES CHECK: OK — 4 feature(s), entries verified (file + symbol + blob sha), no duplicate id or entry.",
+          "note": ""
+        },
+        {
+          "label": "Validasi akhir semua file tim",
+          "cmd": "python3 /home/hatch/workspace/team-roster-skill/skills/team-roster/scripts/validate.py team",
+          "exit": 0,
+          "expected": "pass",
+          "gate_ok": true,
+          "output": "! history: no last-known-main-SHA recorded yet — run sync_check to record one\nVALIDATE: OK — 3 roster member(s), 7 claim(s), 4 feature(s), 1 PRD item(s), 0 fan-out group(s), 0 gate(s), 0 receipt(s), 0 review(s) cross-checked; 17 team/ file(s) scanned for secrets/PII.",
+          "note": ""
+        }
+      ],
+      "final_state": {
+        "roster": {
+          "assistant": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "owner": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          },
+          "teammate-1": {
+            "status": "active",
+            "version": null,
+            "owner": null,
+            "released_by": null
+          }
+        },
+        "claims": {
+          "t-001": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-1201": {
+            "status": "active",
+            "version": null,
+            "owner": "assistant",
+            "released_by": null
+          },
+          "t-1202": {
+            "status": "active",
+            "version": null,
+            "owner": "assistant",
+            "released_by": null
+          },
+          "t-1204": {
+            "status": "active",
+            "version": null,
+            "owner": "teammate-1",
+            "released_by": null
+          },
+          "t-1205": {
+            "status": "active",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          },
+          "t-1206": {
+            "status": "active",
+            "version": null,
+            "owner": "teammate-1",
+            "released_by": null
+          },
+          "t-1207": {
+            "status": "released",
+            "version": null,
+            "owner": "owner",
+            "released_by": "owner"
+          }
+        },
+        "features": {
+          "greet-api": {
+            "status": "experimental",
+            "version": "2.0.0",
+            "owner": "assistant",
+            "released_by": null
+          },
+          "login-api": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "owner",
+            "released_by": null
+          },
+          "old-api": {
+            "status": "experimental",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          },
+          "price-monitor": {
+            "status": "stable",
+            "version": "1.0.0",
+            "owner": "assistant",
+            "released_by": null
+          }
+        },
+        "prd": {
+          "prd-001": {
+            "status": "in_progress",
+            "version": null,
+            "owner": "owner",
+            "released_by": null
+          }
+        }
+      }
     }
   ],
   "summary": {
-    "scenarios": 11,
-    "steps": 424,
-    "gates_ok": 424,
+    "scenarios": 12,
+    "steps": 463,
+    "gates_ok": 463,
     "gates_failed": 0
   }
 }
