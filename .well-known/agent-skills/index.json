@@ -5,8 +5,8 @@
       "name": "team-roster",
       "description": "Know your team before you start any job, don't collide with teammates who are already working, don't rebuild a feature that already exists \u2014 continue and improve it in place instead. v2 stores team state sharded (one file per roster member, claim, and feature under team/, plus a generated index, event log, and mailbox), enforced by a local hook plus a CI twin. Load the roster first, check the mailbox and run doctor.py, claim the task and files before touching them, search the feature registry before building anything, reuse a stable feature instead of rebuilding it, and improve it in place with a version bump. Never invent a teammate who is not in the roster, never edit a file someone else has claimed, never rebuild a feature that is already in the registry, and never fork a feature to improve it.",
       "type": "skill-md",
-      "url": "https://raw.githubusercontent.com/Rifkiend/TheRoster/v2.6.0/skills/team-roster/SKILL.md",
-      "digest": "sha256:15c51f6fa02ec355389431909140d5822f85f5d2d097abb49fb5eea2eb67135f"
+      "url": "https://raw.githubusercontent.com/Rifkiend/TheRoster/v2.7.0/skills/team-roster/SKILL.md",
+      "digest": "sha256:dc1e859feddd1f2cf7d80626ef436b6a220542a26fb8d9f7f9cf8d118503d6ca"
     }
   ]
 }
