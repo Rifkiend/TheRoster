@@ -42,6 +42,12 @@ Checks:
     reviews.py check) — a failure in any of them FAILS doctor, the
     same as a claim/feature failure would. A missing script warns
     only (a pre-v2.6 skill copy has no Orca scripts yet).
+12. Graphyfy (v2.8): graph.py exists (WARN if missing — a pre-v2.8
+    skill copy has none) and team/graph.json, when present, is fresh
+    (FAIL if stale — starting work with a lying map is exactly the
+    failure mode; regenerate first). A missing graph only warns when
+    the repo is above the measured threshold; below it, no graph is
+    fine. Same shared gate as validate.py (graph.check_graph).
 
 Exit 0 = healthy. Exit 1 = something is wrong, with install
 instructions printed. Warnings do not fail the run.
@@ -247,7 +253,7 @@ def main():
         _spath = os.path.join(scripts_dir, _script)
         if not os.path.isfile(_spath):
             warnings.append(f"{_script} not found in {scripts_dir} — {_subdir} records cannot be "
-                            "checked; update the skill copy to v2.7.0")
+                            "checked; update the skill copy to v2.8.0")
             continue
         _r = subprocess.run(
             [sys.executable, _spath, "check",
@@ -261,6 +267,35 @@ def main():
         if _r.returncode != 0:
             problems.append(f"{_script} check FAILED on {os.path.join(args.team, _subdir)} — "
                             f"fix the {_subdir} records (see the output above) before starting work")
+
+    # 12. Graphyfy (v2.8): the code graph, when present, must be fresh
+    # — a stale map is worse than no map, so a stale graph FAILS
+    # doctor the same way a broken claim would. A missing graph only
+    # warns when the repo is above the measured threshold (below it,
+    # reading directly is cheaper and no graph is needed). The gate
+    # is the shared graph.check_graph — the same one validate.py
+    # calls — so doctor and validate can never disagree about it.
+    _gpath = os.path.join(scripts_dir, "graph.py")
+    if not os.path.isfile(_gpath):
+        warnings.append("graph.py not found in %s — the code graph "
+                        "cannot be checked; update the skill copy to "
+                        "v2.8.0" % scripts_dir)
+    else:
+        try:
+            import graph as _gr
+            _gerr, _gwarn, _gstat = _gr.check_graph(team_dir, root)
+        except Exception as e:  # noqa: BLE001 — doctor must not crash
+            warnings.append("graph.py check could not run (%s) — "
+                            "graph freshness is unverified" % e)
+            _gerr, _gwarn, _gstat = [], [], "check failed"
+        for _w in _gwarn:
+            warnings.append("graph: " + _w)
+        for _e in _gerr:
+            problems.append("graph: " + _e + " — fix it before starting "
+                            "work (regenerate the graph, see the message "
+                            "above)")
+        if not _gerr and os.path.isfile(os.path.join(team_dir, "graph.json")):
+            print(f"doctor: graph {_gstat} OK")
 
     for w in warnings:
         print(f"doctor: warning — {w}")
